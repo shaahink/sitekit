@@ -1,4 +1,5 @@
 export { createFeedbackHandler, type FeedbackHandler } from "./handler.js";
+export { appJwt, installationToken, clearAppTokenCache, type AppAuthOptions } from "./app-auth.js";
 export type { FeedbackEnv, FeedbackOptions, LocaleRule, RateLimit } from "./types.js";
 export { safeEqual, sameHost, createThrottle } from "./guards.js";
 export { gh, type GhOptions, type GhResult } from "./github.js";

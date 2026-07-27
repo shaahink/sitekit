@@ -9,6 +9,13 @@
 export interface FeedbackEnv {
   /** Fine-grained PAT with Issues RW and Contents RW on the site repo. */
   token?: string | undefined;
+  /** GitHub App credentials — the PAT's replacement. All three must be set;
+      when they are, they win over `token`, so a site flips to App auth the
+      moment the vars land and the PAT can be revoked afterwards. */
+  appId?: string | undefined;
+  /** PKCS#8 PEM — see app-auth.ts for why PKCS#1 is rejected. */
+  appPrivateKey?: string | undefined;
+  appInstallationId?: string | undefined;
   /** The repo issues are filed against, as "owner/name". */
   repo?: string | undefined;
   /** The secret carried by the ?review=... link. */

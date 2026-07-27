@@ -9,6 +9,7 @@
    the repo owner's behalf with a server-side token, passed in via options. */
 
 import type { FeedbackEnv, FeedbackOptions } from "./types.js";
+import { installationToken } from "./app-auth.js";
 import { createThrottle, safeEqual, sameHost } from "./guards.js";
 import { gh } from "./github.js";
 import { uploadScreenshot } from "./screenshots.js";
@@ -41,19 +42,29 @@ export function createFeedbackHandler(options: FeedbackOptions): FeedbackHandler
     const env = resolveEnv();
     return json({
       ok: true,
-      configured: Boolean(env.token && env.repo && env.reviewKey)
+      configured: Boolean(hasCredential(env) && env.repo && env.reviewKey)
     });
   }
 
   async function POST(request: Request): Promise<Response> {
     const env = resolveEnv();
-    const token = env.token;
     const repo = env.repo;
     const reviewKey = env.reviewKey;
     const branch = env.branch || "feedback-assets";
 
-    if (!token || !repo || !reviewKey) {
+    if (!hasCredential(env) || !repo || !reviewKey) {
       return json({ ok: false, error: "Feedback is not configured yet." }, 503);
+    }
+
+    /* App auth wins over the PAT (see FeedbackEnv). Minting can fail —
+       bad key, GitHub down — and that is a server problem, not the
+       visitor's. */
+    let token: string;
+    try {
+      token = await resolveToken(env, userAgent);
+    } catch (error) {
+      console.error("credential resolution failed:", (error as Error).message);
+      return json({ ok: false, error: "Couldn't file that note." }, 502);
     }
 
     /* Only our own pages may post here. */
@@ -145,4 +156,20 @@ export function createFeedbackHandler(options: FeedbackOptions): FeedbackHandler
   }
 
   return { GET, POST };
+}
+
+function hasCredential(env: FeedbackEnv): boolean {
+  return Boolean(env.token || (env.appId && env.appPrivateKey && env.appInstallationId));
+}
+
+async function resolveToken(env: FeedbackEnv, userAgent: string): Promise<string> {
+  if (env.appId && env.appPrivateKey && env.appInstallationId) {
+    return installationToken({
+      appId: env.appId,
+      privateKey: env.appPrivateKey,
+      installationId: env.appInstallationId,
+      userAgent
+    });
+  }
+  return env.token as string;
 }
