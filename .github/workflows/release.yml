@@ -1,0 +1,32 @@
+# Publishes to npm via trusted publishing (OIDC) — no token, no 2FA prompt.
+# One-time setup on npmjs.com: package Settings → Trusted Publisher →
+# GitHub Actions → repository shaahink/sitekit, workflow release.yml.
+#
+# To release: bump the version in package.json, commit, then
+#   git tag v0.x.y && git push origin main --tags
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs a recent npm; the one bundled with Node 22
+      # predates OIDC support.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      # prepublishOnly runs the build and the tests before anything ships.
+      - run: npm publish
