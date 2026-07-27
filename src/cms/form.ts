@@ -1,0 +1,229 @@
+/* The form model, derived from the content schema.
+   ---------------------------------------------------------------------------
+   This is the whole bet of PLAN §3.9: if the editor can be generated from the
+   Zod schemas the sites already have, adding it to a site costs nothing but
+   wiring. Zod 4 ships `z.toJSONSchema()`, so this walks that output and emits
+   field descriptors the client renders. Pure — no DOM, no fetch — so it is
+   unit-testable like everything else in the kit.
+
+   `io: "input"` matters. In output mode Zod marks `.default()` fields as
+   required, because after parsing they always exist. But the editor edits the
+   *file*, and a file may legitimately omit a defaulted field — output mode
+   would flag perfectly valid content as incomplete. Input mode describes what
+   the YAML may contain, which is the question being asked here. */
+
+import { z } from "zod";
+
+const MAX_SAFE = 9007199254740991;
+
+export interface SelectOption {
+  value: string | number | boolean;
+  label: string;
+}
+
+interface FieldCommon {
+  /** Dotted path into the document. Array item templates carry `[]`, as in
+      `hero.slides[].alt`; the client substitutes an index per row. */
+  path: string;
+  label: string;
+  required: boolean;
+  /** From `.describe()`, when a schema carries one. */
+  help?: string;
+}
+
+export type Field =
+  | (FieldCommon & {
+      kind: "text";
+      /** No maxLength in the schema, so probably prose. Only picks the
+          control's starting height — see the note on rendering below. */
+      long: boolean;
+      maxLength?: number;
+      minLength?: number;
+      format?: string;
+      default?: string;
+    })
+  | (FieldCommon & {
+      kind: "number";
+      integer: boolean;
+      min?: number;
+      max?: number;
+      default?: number;
+    })
+  | (FieldCommon & { kind: "boolean"; default?: boolean })
+  | (FieldCommon & { kind: "select"; options: SelectOption[]; default?: string | number | boolean })
+  | (FieldCommon & { kind: "group"; fields: Field[] })
+  | (FieldCommon & { kind: "array"; item: Field });
+
+export interface FormModelOptions {
+  /** Template paths to leave out — `images[].w` and friends. The layouts
+      depend on pixel sizes, so they are not an owner's business to edit. */
+  omit?: string[];
+}
+
+/** The top-level object's fields. Throws if the schema isn't an object, which
+    every content collection is. */
+export function formModel(schema: z.ZodType, options: FormModelOptions = {}): Field[] {
+  const root = z.toJSONSchema(schema, { io: "input" }) as Node;
+  const omit = new Set(options.omit ?? []);
+  const resolved = deref(root, root);
+  if (!resolved.properties) throw new Error("content schema must be an object");
+  return groupFields(resolved, "", root, omit);
+}
+
+/* --- the walk --------------------------------------------------------- */
+
+interface Node {
+  type?: string | string[];
+  properties?: Record<string, Node>;
+  required?: string[];
+  items?: Node;
+  anyOf?: Node[];
+  oneOf?: Node[];
+  const?: unknown;
+  default?: unknown;
+  description?: string;
+  maxLength?: number;
+  minLength?: number;
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  format?: string;
+  $ref?: string;
+  $defs?: Record<string, Node>;
+}
+
+function groupFields(node: Node, prefix: string, root: Node, omit: Set<string>): Field[] {
+  const required = new Set(node.required ?? []);
+  const fields: Field[] = [];
+  for (const [key, child] of Object.entries(node.properties ?? {})) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (omit.has(path)) continue;
+    const field = walk(deref(child, root), path, humanize(key), required.has(key), root, omit);
+    if (field) fields.push(field);
+  }
+  return fields;
+}
+
+function walk(
+  node: Node,
+  path: string,
+  label: string,
+  required: boolean,
+  root: Node,
+  omit: Set<string>
+): Field | null {
+  const common: FieldCommon = {
+    path,
+    label,
+    required,
+    ...(node.description ? { help: node.description } : {})
+  };
+
+  /* A closed set of literals is a select — `z.union([z.literal(2),
+     z.literal(3)])` is how the fleet spells "two or three columns". */
+  const branches = node.anyOf ?? node.oneOf;
+  if (branches?.length) {
+    const resolvedBranches = branches.map((b) => deref(b, root));
+    if (resolvedBranches.every((b) => b.const !== undefined)) {
+      return {
+        ...common,
+        kind: "select",
+        options: resolvedBranches.map((b) => ({
+          value: b.const as string | number | boolean,
+          label: String(b.const)
+        })),
+        ...(isScalarDefault(node.default) ? { default: node.default } : {})
+      };
+    }
+    /* Otherwise it's a nullable or a genuine union; edit the first real
+       branch rather than refusing to render the field at all. */
+    const first = resolvedBranches.find((b) => typeName(b) !== "null");
+    if (first) return walk(first, path, label, required, root, omit);
+    return null;
+  }
+
+  switch (typeName(node)) {
+    case "object":
+      return { ...common, kind: "group", fields: groupFields(node, path, root, omit) };
+
+    case "array": {
+      if (!node.items) return null;
+      const item = walk(deref(node.items, root), `${path}[]`, singular(label), true, root, omit);
+      return item ? { ...common, kind: "array", item } : null;
+    }
+
+    case "boolean":
+      return {
+        ...common,
+        kind: "boolean",
+        ...(typeof node.default === "boolean" ? { default: node.default } : {})
+      };
+
+    case "integer":
+    case "number": {
+      const min = node.exclusiveMinimum ?? node.minimum;
+      const max = node.exclusiveMaximum ?? node.maximum;
+      return {
+        ...common,
+        kind: "number",
+        integer: typeName(node) === "integer",
+        ...(min !== undefined && Math.abs(min) !== MAX_SAFE ? { min } : {}),
+        ...(max !== undefined && Math.abs(max) !== MAX_SAFE ? { max } : {}),
+        ...(typeof node.default === "number" ? { default: node.default } : {})
+      };
+    }
+
+    /* Everything else — including `z.any()`, which emits no type at all —
+       is editable as text. Better a plain box than a missing field. */
+    default:
+      return {
+        ...common,
+        kind: "text",
+        long: node.maxLength === undefined,
+        ...(node.maxLength !== undefined ? { maxLength: node.maxLength } : {}),
+        ...(node.minLength !== undefined ? { minLength: node.minLength } : {}),
+        ...(node.format ? { format: node.format } : {}),
+        ...(typeof node.default === "string" ? { default: node.default } : {})
+      };
+  }
+}
+
+/* Reused schemas inline by default in Zod 4, so `$ref` should never appear
+   for the fleet's shapes. It is resolved anyway because a recursive schema or
+   an explicit registry would produce one, and a silently mis-rendered field
+   is far worse than eight lines of insurance. */
+function deref(node: Node, root: Node): Node {
+  let current = node;
+  for (let hops = 0; current.$ref && hops < 10; hops++) {
+    const name = current.$ref.replace(/^#\/\$defs\//, "");
+    const target = root.$defs?.[name];
+    if (!target) throw new Error(`unresolvable $ref: ${current.$ref}`);
+    current = target;
+  }
+  return current;
+}
+
+function typeName(node: Node): string {
+  if (Array.isArray(node.type)) return node.type.find((t) => t !== "null") ?? "null";
+  return node.type ?? "";
+}
+
+function isScalarDefault(value: unknown): value is string | number | boolean {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+/** `ogDescription` → `Og description`. Not clever, and it doesn't need to be:
+    the field's own name is what the owner recognises from their content. */
+function humanize(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+}
+
+/** A row inside `Slides` is a `Slide`. Crude, and only ever a label. */
+function singular(label: string): string {
+  if (/(ses|xes|zes|ches|shes)$/i.test(label)) return label.slice(0, -2);
+  if (/ies$/i.test(label)) return `${label.slice(0, -3)}y`;
+  if (/[^s]s$/i.test(label)) return label.slice(0, -1);
+  return label;
+}

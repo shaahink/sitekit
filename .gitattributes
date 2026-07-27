@@ -1,0 +1,5 @@
+# The YAML fixtures stand in for what GitHub's Contents API hands back, which
+# is the bytes git stores — LF. Windows checkouts run with core.autocrlf=true,
+# so without this the fixtures would arrive as CRLF and the normalisation tests
+# would be measuring the checkout filter rather than the writer.
+test/fixtures/*.yaml -text
