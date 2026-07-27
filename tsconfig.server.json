@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    /* WebWorker, not DOM: it types exactly the portable surface — fetch,
+       Request/Response, URL, Web Crypto — and nothing that would only exist
+       in a browser page or a Node process. If a handler needs `document` or
+       a Node built-in, this config is what catches it. */
+    "lib": ["ES2023", "WebWorker"],
+    "types": []
+  },
+  "include": ["src/feedback", "src/shot", "src/credits", "src/headers"]
+}

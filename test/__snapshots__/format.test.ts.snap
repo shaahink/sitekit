@@ -1,0 +1,65 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildBody > renders the full body with a screenshot 1`] = `
+"> The gold feels too bright here.
+
+<sub>— **Elfine** · 27 July 2026 at 14:34 CEST</sub>
+
+### Where
+
+**Ateliers** › “Chant du monde”
+
+[↗ Open this spot on the site](https://elfine-site.vercel.app/fr/#ateliers)
+
+### Screenshot
+
+<img src="https://elfine-site.vercel.app/api/shot?p=screenshots%2F2026-07-27%2Faa.jpg" width="460" alt="Screenshot sent with this note">
+
+<details>
+<summary>Page &amp; device details</summary>
+
+| | |
+| --- | --- |
+| Page | \`/fr/\` — French |
+| Section | Ateliers \`#ateliers\` |
+| Element | \`img\` |
+| Element text | Chant du monde |
+| Image / link | \`atelier.jpg\` |
+| CSS path | \`#ateliers > div > img\` |
+| Screen | 390×844 · 3× density |
+| Browser | Safari on iPhone |
+
+Full user agent: \`Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/604.1\`
+
+</details>"
+`;
+
+exports[`buildBody > renders without a screenshot section when there is no screenshot 1`] = `
+"> The gold feels too bright here.
+
+<sub>— **Elfine** · 27 July 2026 at 14:34 CEST</sub>
+
+### Where
+
+**Ateliers** › “Chant du monde”
+
+[↗ Open this spot on the site](https://elfine-site.vercel.app/fr/#ateliers)
+
+<details>
+<summary>Page &amp; device details</summary>
+
+| | |
+| --- | --- |
+| Page | \`/fr/\` — French |
+| Section | Ateliers \`#ateliers\` |
+| Element | \`img\` |
+| Element text | Chant du monde |
+| Image / link | \`atelier.jpg\` |
+| CSS path | \`#ateliers > div > img\` |
+| Screen | 390×844 · 3× density |
+| Browser | Safari on iPhone |
+
+Full user agent: \`Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Safari/604.1\`
+
+</details>"
+`;

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    /* The widget entry is the one place DOM types are allowed. Target ES2017:
+       the widget's own API floor (fetch, URLSearchParams, visualViewport)
+       already sits at browsers that speak ES2017 syntax. */
+    "target": "ES2017",
+    "lib": ["ES2017", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/widget"]
+}

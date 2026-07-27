@@ -1,0 +1,13 @@
+{
+  /* Editor/vitest view of the whole tree. The build goes through
+     tsconfig.server.json and tsconfig.widget.json, which are stricter about
+     which globals each entry point may see. */
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable", "WebWorker.ImportScripts"],
+    "types": [],
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}
