@@ -1,6 +1,6 @@
 {
   "name": "@shaahink/sitekit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shared logic for the sk site fleet: feedback intake, screenshot proxy, widget internals, credits, and the dual header emitter.",
   "license": "MIT",
   "repository": {

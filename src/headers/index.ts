@@ -28,13 +28,18 @@ export interface HostConfig {
       a Vercel-file concern; Cloudflare Pages configures it in the dashboard. */
   disableDeploymentsFor?: string[];
   redirects?: RedirectRule[];
+  /** Extra top-level vercel.json keys — framework, outputDirectory — merged in
+      directly after $schema. A Vercel-file concern with no Cloudflare
+      counterpart; the Cloudflare emitters never see it. */
+  vercel?: Record<string, unknown>;
 }
 
 /** The complete vercel.json text, trailing newline included — meant to be
     written to disk verbatim and committed. */
 export function vercelJson(config: HostConfig): string {
   const out: Record<string, unknown> = {
-    "$schema": "https://openapi.vercel.sh/vercel.json"
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    ...config.vercel
   };
 
   if (config.disableDeploymentsFor && config.disableDeploymentsFor.length) {

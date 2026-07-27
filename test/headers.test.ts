@@ -88,6 +88,30 @@ describe("vercelJson", () => {
     expect(text).not.toContain('"git"');
     expect(JSON.parse(text)).toMatchObject({ headers: [{ source: "/(.*)" }] });
   });
+
+  it("merges the vercel passthrough directly after $schema, byte for byte", () => {
+    /* The splice the Astro sites carried in their own emit scripts — same
+       keys, same order. If this shape drifts, their vercel.json files churn
+       on the next regeneration. */
+    const text = vercelJson({
+      vercel: { framework: "astro", outputDirectory: "dist" },
+      headers: [{ path: "/*", headers: { "X-Content-Type-Options": "nosniff" } }]
+    });
+    expect(text).toBe(`{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "astro",
+  "outputDirectory": "dist",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" }
+      ]
+    }
+  ]
+}
+`);
+  });
 });
 
 describe("cloudflareHeaders", () => {
