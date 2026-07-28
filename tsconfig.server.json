@@ -8,5 +8,14 @@
     "lib": ["ES2023", "WebWorker"],
     "types": []
   },
-  "include": ["src/feedback", "src/shot", "src/credits", "src/headers", "src/seo", "src/analytics"]
+  "include": [
+    "src/feedback",
+    "src/shot",
+    "src/credits",
+    "src/headers",
+    "src/seo",
+    "src/analytics",
+    "src/cms",
+    "src/internal"
+  ]
 }

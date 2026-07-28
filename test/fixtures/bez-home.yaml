@@ -1,0 +1,117 @@
+meta:
+  title: "Bruce Nemeth — Interdisciplinary Artist"
+  description: >-
+    Bruce Nemeth is an interdisciplinary artist living and working in the UK —
+    curation, installation, and sound woven into cross-disciplinary,
+    multisensory explorations of repetition, memory, and self.
+  ogDescription: "Curation, installation, and sound — multisensory explorations of repetition, memory, and self."
+  ogImage: "/images/hero/hero-steps.jpg"
+  twitterDescription: "Curation, installation, and sound — multisensory explorations of repetition, memory, and self."
+  canonical: "/"
+
+hero:
+  eyebrow: "Curation · Installation · Sound"
+  nameLatin: "Bruce"
+  nameFa: "بهروز"
+  tagline: >-
+    An interdisciplinary artist listening for the difference inside everything
+    that seems to repeat.
+  glyph: "تکرار"
+  cue: "Enter"
+  slides:
+    - src: "/images/hero/hero-steps.jpg"
+      alt: "A black canvas with a single white gesture, resting on the ruined brick steps of an old house"
+      w: 2200
+      h: 1467
+    - src: "/images/hero/hero-red.jpg"
+      alt: "Red brushstrokes sweeping down a dark canvas"
+      w: 1467
+      h: 2200
+    - src: "/images/hero/hero-niche.jpg"
+      alt: "A calligraphic canvas set into a broken window niche, caught in hard sunlight"
+      w: 1467
+      h: 2200
+    - src: "/images/hero/hero-triptych.jpg"
+      alt: "Three black-and-white calligraphic canvases hung in a row"
+      w: 2200
+      h: 1467
+    - src: "/images/hero/hero-crimson.jpg"
+      alt: "Dense crimson calligraphy on black — a close detail"
+      w: 1237
+      h: 2200
+
+marquee:
+  - text: "Repetition is a myth"
+  - text: "تکرار"
+    fa: true
+  - text: "Difference inhabits sameness"
+  - text: "What appears cyclical reveals itself as spiral"
+
+statement:
+  kicker: "Artist Statement"
+  lead: "Repetition is a myth — each iteration carries the temporal signature of its moment."
+  body: >-
+    What masquerades as return is actually <b>departure</b>; what appears
+    cyclical reveals itself as <b>spiral</b>. Time itself ensures that no
+    gesture, no sound, no form can truly repeat, for difference inhabits the
+    very core of what we mistake for sameness.
+  signature: "Bruce Nemeth"
+
+about:
+  eyebrow: "About the artist"
+  portrait:
+    src: "/images/bruce-main.JPG"
+    alt: "Portrait of Bruce Nemeth"
+    w: 1600
+    h: 2400
+    caption: "In the studio"
+  lead: >-
+    I am an interdisciplinary artist living and working in the UK — art
+    director and curator, weaving installation and sound into
+    cross-disciplinary, multisensory explorations.
+  text: >-
+    My art is rooted in the choreography of internal behaviours — where
+    repetition and randomness shape reflective environments and sonic
+    encounters. Each project invites immersion in chance, memory, and self: an
+    attention paid to the small departures that live inside every act of
+    returning.
+  tags:
+    - "Sound"
+    - "Installation"
+    - "Curation"
+    - "Art direction"
+    - "London, UK"
+  cta: "Full biography →"
+
+works:
+  eyebrow: "Selected Works"
+  title: "Gestures that <em>refuse</em> to repeat"
+  count: "Two projects · Moving image"
+
+tease:
+  eyebrow: "The Showcase"
+  title: "Ink, held to the light"
+  hint: "Canvases · In the open · Works on paper"
+  aria: "Enter the Showcase — the calligraphy gallery"
+  image:
+    src: "/images/hero/hero-crimson.jpg"
+    alt: ""
+    w: 1237
+    h: 2200
+
+film:
+  eyebrow: "Moving Image"
+  title: "On screen, in time"
+  videoId: "kR73ZEk26LU"
+  buttonAria: "Play video work by Bruce Nemeth"
+  label: "Play — video work"
+
+partners:
+  eyebrow: "Partners"
+  intro: "The practice is cross-disciplinary — and it keeps returning to the same few hands."
+
+contact:
+  eyebrow: "Contact"
+  title: "Let's begin<br />a conversation."
+  text: "For exhibitions, partnerships, or a quiet hello — a single email is all it takes."
+  email: "Brucenemeth@outlook.com"
