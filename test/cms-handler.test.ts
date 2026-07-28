@@ -292,4 +292,16 @@ describe("the auth endpoint", () => {
     const response = await auth.DELETE();
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
+
+  it("publishes the client ID so the page can render a working button", async () => {
+    const body = await (await auth.GET()).json();
+    expect(body).toEqual({ ok: true, configured: true, clientId: env.googleClientId });
+  });
+
+  it("reports itself unconfigured rather than serving a button that can't work", async () => {
+    const bare = createAuthHandler({ env: { sessionSecret: "x" } });
+    const body = await (await bare.GET()).json();
+    expect(body.configured).toBe(false);
+    expect(body.clientId).toBeUndefined();
+  });
 });

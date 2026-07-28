@@ -22,6 +22,7 @@ import { clearSession, issueSession } from "./session.js";
 import type { CmsEnv } from "./types.js";
 
 export interface AuthHandler {
+  GET(request?: Request): Promise<Response>;
   POST(request: Request): Promise<Response>;
   DELETE(request?: Request): Promise<Response>;
 }
@@ -35,6 +36,21 @@ export interface AuthHandlerOptions {
 export function createAuthHandler(options: AuthHandlerOptions): AuthHandler {
   const resolveEnv: () => CmsEnv =
     typeof options.env === "function" ? options.env : () => options.env as CmsEnv;
+
+  /* The client ID is public by design — in Google's own examples it sits in
+     the page's HTML. Serving it from here rather than baking it into the build
+     means setting it takes an environment variable and a redeploy, not a code
+     change, and the page can say "not configured yet" instead of rendering a
+     button that cannot work. */
+  async function GET(): Promise<Response> {
+    const env = resolveEnv();
+    const configured = Boolean(env.googleClientId && env.sessionSecret && env.allowlist);
+    return json({
+      ok: true,
+      configured,
+      ...(env.googleClientId ? { clientId: env.googleClientId } : {})
+    });
+  }
 
   async function POST(request: Request): Promise<Response> {
     const env = resolveEnv();
@@ -84,7 +100,7 @@ export function createAuthHandler(options: AuthHandlerOptions): AuthHandler {
     return withCookie(json({ ok: true }), clearSession());
   }
 
-  return { POST, DELETE };
+  return { GET, POST, DELETE };
 }
 
 function withCookie(response: Response, cookie: string): Response {
