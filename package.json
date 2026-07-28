@@ -16,7 +16,8 @@
     "bin"
   ],
   "bin": {
-    "sitekit-editor-css": "./bin/editor-css.mjs"
+    "sitekit-editor-css": "./bin/editor-css.mjs",
+    "sitekit-headers": "./bin/headers.mjs"
   },
   "sideEffects": false,
   "publishConfig": {
