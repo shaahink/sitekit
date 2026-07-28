@@ -47,6 +47,7 @@ interface Node {
   anyOf?: Node[];
   oneOf?: Node[];
   const?: unknown;
+  enum?: unknown[];
   default?: unknown;
   description?: string;
   maxLength?: number;
@@ -86,6 +87,24 @@ function walk(
     required,
     ...(node.description ? { help: node.description } : {})
   };
+
+  /* The other spelling of a closed set, and the one anybody writing a new
+     schema reaches for first: `z.enum(["draft", "live"])`. It arrives as an
+     `enum` array rather than as branches, so it used to fall through to a text
+     box — a box that accepts a typo the panel cannot catch and the build then
+     rejects, which is the worst of both. Found by reading a generated form
+     model rather than by trusting it. */
+  if (node.enum?.length) {
+    return {
+      ...common,
+      kind: "select",
+      options: node.enum.map((value) => ({
+        value: value as string | number | boolean,
+        label: String(value)
+      })),
+      ...(isScalarDefault(node.default) ? { default: node.default } : {})
+    };
+  }
 
   /* A closed set of literals is a select — `z.union([z.literal(2),
      z.literal(3)])` is how the fleet spells "two or three columns". */
@@ -195,9 +214,16 @@ function humanize(key: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
 
-/** A row inside `Slides` is a `Slide`. Crude, and only ever a label. */
+/** A row inside `Slides` is a `Slide`. Crude, and only ever a label.
+
+    The `-es` rules want a stem that already hisses — class, box, dish — and
+    `sses` is what distinguishes those from a word that simply ends in `-se`.
+    Without it "Promises" came out as "Promis", because `ses` matched. English
+    keeps one genuine ambiguity here ("Buses" reads as "Buse") and that is left
+    alone: it is a row heading, and inventing more rules for it would cost more
+    than it saves. */
 function singular(label: string): string {
-  if (/(ses|xes|zes|ches|shes)$/i.test(label)) return label.slice(0, -2);
+  if (/(sses|xes|zes|ches|shes)$/i.test(label)) return label.slice(0, -2);
   if (/ies$/i.test(label)) return `${label.slice(0, -3)}y`;
   if (/[^s]s$/i.test(label)) return label.slice(0, -1);
   return label;

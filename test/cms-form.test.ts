@@ -20,9 +20,13 @@ const schema = z.object({
     twitterDescription: z.string().optional()
   }),
   columns: z.union([z.literal(2), z.literal(3)]).default(2),
+  tier: z.enum(["starter", "studio", "bespoke"]),
+  status: z.enum(["draft", "live"]).default("draft"),
   tall: z.boolean().default(false),
   hero: z.object({ slides: z.array(picture) }),
   pieces: z.array(picture.extend({ caption: z.string().default("") })),
+  promises: z.array(z.string()),
+  classes: z.array(z.string()),
   tags: z.array(z.string()),
   note: z.string().describe("Shown under the heading")
 });
@@ -72,6 +76,23 @@ describe("formModel", () => {
     expect(columns?.kind === "select" && columns.default).toBe(2);
   });
 
+  /* The spelling anyone writing a new schema reaches for first. It arrives as
+     an `enum` array rather than as branches, and used to fall through to a
+     text box that accepts a typo the build then rejects. */
+  it("renders z.enum as a select too", () => {
+    const tier = byPath.get("tier");
+    expect(tier?.kind).toBe("select");
+    expect(tier?.kind === "select" && tier.options.map((o) => o.value)).toEqual([
+      "starter",
+      "studio",
+      "bespoke"
+    ]);
+  });
+
+  it("keeps an enum's default", () => {
+    expect(byPath.get("status")).toMatchObject({ kind: "select", default: "draft" });
+  });
+
   it("renders a boolean as a boolean", () => {
     expect(byPath.get("tall")).toMatchObject({ kind: "boolean", default: false });
   });
@@ -111,6 +132,14 @@ describe("formModel", () => {
     expect(byPath.get("hero.slides")?.label).toBe("Slides");
     /* A row inside Slides is a Slide. */
     expect(byPath.get("hero.slides[]")?.label).toBe("Slide");
+  });
+
+  /* The `-es` rules are for stems that already hiss. "Promises" is not one,
+     and used to come out as "Promis". */
+  it("singularises a row heading without eating the stem", () => {
+    expect(byPath.get("promises[]")?.label).toBe("Promise");
+    expect(byPath.get("classes[]")?.label).toBe("Class");
+    expect(byPath.get("pieces[]")?.label).toBe("Piece");
   });
 
   it("omits the fields a site says an owner shouldn't touch", () => {
