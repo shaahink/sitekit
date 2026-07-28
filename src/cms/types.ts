@@ -41,6 +41,11 @@ export interface CollectionConfig {
   omit?: string[];
   /** Shown in the panel instead of the collection key. */
   label?: string;
+  /** Shown in the panel instead of an entry's file name, keyed by it.
+      A bilingual site needs this: `home.fr` only reads as "the French page"
+      to someone who already knows, and the one mistake the editor must not
+      make easy is editing the wrong locale believing it is the right one. */
+  entryLabels?: Record<string, string>;
 }
 
 export interface ContentHandlerOptions {

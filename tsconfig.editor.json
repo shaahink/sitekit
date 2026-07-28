@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    /* The editor's neighbour is the widget, not the server build: both run in
+       a browser page and need DOM types. It gets its own config rather than
+       joining tsconfig.widget.json because the two have different floors.
+
+       The widget ships on public pages, so it stays at ES2017 to reach as many
+       visitors' browsers as the site itself does. The editor is one owner's
+       admin tool on one route, so ES2020 is honest — and it needs the lib as
+       well as the syntax, because reading a path like `slides[0].alt` uses
+       String.prototype.matchAll. */
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/editor"]
+}

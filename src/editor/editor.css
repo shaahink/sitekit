@@ -1,0 +1,263 @@
+/* The editor's chrome — a working surface, not a designed one.
+   ---------------------------------------------------------------------------
+   This file is the reason CLAUDE.md's "no design system in the kit" rule was
+   scoped: it governs the pages a visitor sees. The editor is an admin surface,
+   and four hand-maintained copies of one panel is exactly what sitekit exists
+   to prevent. Nobody's face is their admin panel.
+
+   So the palette here is deliberately *nobody's*: a neutral dark tool that
+   sits equally oddly next to all four sites rather than belonging to one. A
+   site that wants its own reads the custom properties below — bg, raise, ink,
+   line, accent and font are enough for a different look, because everything
+   derived from them is a translucent overlay rather than a fixed colour.
+
+   Logical properties throughout (PLAN §3.5). The panel's chrome is LTR by
+   default, but nimagiti is RTL and its fields hold Farsi, so nothing here may
+   assume a direction — set `dir` on the page and the panel follows.
+
+   Served from the site's public/ and linked, never imported through Astro:
+   Astro folds every processed stylesheet's hash into *every* page's CSP, so an
+   import here would change the public pages' policy for no reason. A static
+   asset under style-src 'self' costs nothing and keeps that exact. The site's
+   `npm run editor` copies this file; CI diffs it. */
+
+:root {
+  /* The six a re-skin actually needs. */
+  --sk-editor-bg: #101114;
+  --sk-editor-raise: #171a1f;
+  --sk-editor-ink: #e7e8ec;
+  --sk-editor-line: rgba(231, 232, 236, 0.14);
+  --sk-editor-accent: #6f93c9;
+  --sk-editor-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Derived, and translucent so they follow the six above. Set them too if a
+     light skin is wanted — these assume ink over bg, not the reverse. */
+  --sk-editor-dim: rgba(231, 232, 236, 0.68);
+  --sk-editor-muted: rgba(231, 232, 236, 0.46);
+  --sk-editor-line-soft: rgba(231, 232, 236, 0.07);
+  --sk-editor-accent-lit: #8fb0e0;
+
+  --sk-editor-display: var(--sk-editor-font);
+  --sk-editor-width: 46rem;
+  --sk-editor-gap: 1.25rem;
+  --sk-editor-radius: 3px;
+}
+
+body {
+  margin: 0;
+  background: var(--sk-editor-bg);
+}
+
+.sk-editor {
+  box-sizing: border-box;
+  max-inline-size: var(--sk-editor-width);
+  margin-inline: auto;
+  padding-inline: clamp(1.25rem, 5vw, 3rem);
+  padding-block: clamp(2rem, 6vw, 4rem) 8rem;
+  font-family: var(--sk-editor-font);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--sk-editor-ink);
+}
+
+.sk-editor *,
+.sk-editor *::before,
+.sk-editor *::after {
+  box-sizing: border-box;
+}
+
+.sk-editor__title {
+  font-family: var(--sk-editor-display);
+  font-size: 1.6rem;
+  font-weight: 400;
+  margin-block: 0 0.5rem;
+}
+
+.sk-editor__note,
+.sk-editor__help,
+.sk-editor__count,
+.sk-editor__status {
+  color: var(--sk-editor-dim);
+  font-size: 0.85rem;
+  margin-block: 0.35rem 0;
+}
+
+.sk-editor__error,
+.sk-editor__issue {
+  color: var(--sk-editor-accent-lit);
+  font-size: 0.85rem;
+  margin-block: 0.35rem 0;
+}
+
+.sk-editor__count.is-full { color: var(--sk-editor-accent-lit); }
+
+/* Who you are, and the way out. */
+.sk-editor__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-block-end: 0.75rem;
+  border-block-end: 1px solid var(--sk-editor-line);
+}
+
+.sk-editor__who {
+  color: var(--sk-editor-dim);
+  font-size: 0.85rem;
+}
+
+.sk-editor__link {
+  color: var(--sk-editor-ink);
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.sk-editor__link:hover { color: var(--sk-editor-accent-lit); }
+
+.sk-editor__picker { margin-block: var(--sk-editor-gap); }
+
+/* Fields */
+.sk-editor__field { margin-block-end: var(--sk-editor-gap); }
+
+.sk-editor__field--inline {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.sk-editor__field--inline .sk-editor__label { margin-block-end: 0; order: 2; }
+
+.sk-editor__label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-block-end: 0.35rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sk-editor-dim);
+}
+
+.sk-editor__optional {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.75rem;
+  color: var(--sk-editor-muted);
+}
+
+.sk-editor__input {
+  inline-size: 100%;
+  display: block;
+  padding: 0.6rem 0.7rem;
+  font-family: inherit;
+  color: var(--sk-editor-ink);
+  background: var(--sk-editor-raise);
+  border: 1px solid var(--sk-editor-line);
+  border-radius: var(--sk-editor-radius);
+  /* 16px stops iOS Safari zooming the page when a field takes focus. */
+  font-size: max(1rem, 16px);
+}
+
+.sk-editor__input--text {
+  resize: vertical;
+  overflow: hidden;
+  min-block-size: 2.6rem;
+  line-height: 1.5;
+}
+
+.sk-editor__input:focus-visible,
+.sk-editor__check:focus-visible {
+  outline: 2px solid var(--sk-editor-accent);
+  outline-offset: 2px;
+}
+
+.sk-editor__check {
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  accent-color: var(--sk-editor-accent);
+  flex: none;
+}
+
+/* A touched field is marked, so it is obvious what a save will send. */
+.sk-editor__field.is-changed .sk-editor__input {
+  border-color: var(--sk-editor-accent);
+}
+
+/* Groups and repeaters */
+.sk-editor__group {
+  margin-block: var(--sk-editor-gap);
+  padding: 1rem;
+  padding-block-start: 0.5rem;
+  border: 1px solid var(--sk-editor-line-soft);
+  border-radius: 4px;
+  /* A fieldset's default min-inline-size is its content, which makes a long
+     unbroken string push the whole panel wider than the viewport. */
+  min-inline-size: 0;
+}
+
+.sk-editor__legend {
+  padding-inline: 0.4rem;
+  font-family: var(--sk-editor-display);
+  font-size: 1.15rem;
+  color: var(--sk-editor-ink);
+}
+
+.sk-editor__row {
+  padding-block: 0.75rem;
+  border-block-start: 1px solid var(--sk-editor-line-soft);
+}
+.sk-editor__row:first-of-type { border-block-start: 0; }
+
+.sk-editor__rowlabel {
+  margin-block: 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sk-editor-muted);
+}
+
+/* The save bar stays reachable with a thumb. */
+.sk-editor__footer {
+  position: sticky;
+  inset-block-end: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-block-start: var(--sk-editor-gap);
+  padding-block: 0.9rem;
+  padding-block-end: calc(0.9rem + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--sk-editor-bg) 25%);
+  border-block-start: 1px solid var(--sk-editor-line);
+}
+
+.sk-editor__footer .sk-editor__note { margin: 0; flex: 1 1 12rem; }
+
+.sk-editor__save {
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 0.7rem 1.5rem;
+  /* A comfortable tap target on a phone. */
+  min-block-size: 44px;
+  color: var(--sk-editor-bg);
+  background: var(--sk-editor-ink);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.sk-editor__save:hover:not(:disabled) { background: var(--sk-editor-accent-lit); }
+.sk-editor__save:disabled { opacity: 0.4; cursor: default; }
+
+.sk-editor__signin { padding-block: 3rem; }
+/* Google renders its own button in here, and it expects a light context. */
+.sk-editor__gbutton { margin-block-start: 1rem; color-scheme: light; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sk-editor * { transition: none !important; }
+}

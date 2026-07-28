@@ -10,7 +10,8 @@ export {
   type SessionOptions
 } from "./session.js";
 export { allows } from "./allowlist.js";
-export { formModel, type Field, type SelectOption, type FormModelOptions } from "./form.js";
+export { formModel, type FormModelOptions } from "./form.js";
+export type { Field, FieldCommon, ScalarField, SelectOption } from "./fields.js";
 export { normalize, applyEdits, readValues, parsePath, type Edit } from "./yaml.js";
 export {
   readFile,

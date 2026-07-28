@@ -13,46 +13,13 @@
    the YAML may contain, which is the question being asked here. */
 
 import { z } from "zod";
+import type { Field, FieldCommon } from "./fields.js";
 
 const MAX_SAFE = 9007199254740991;
 
-export interface SelectOption {
-  value: string | number | boolean;
-  label: string;
-}
-
-interface FieldCommon {
-  /** Dotted path into the document. Array item templates carry `[]`, as in
-      `hero.slides[].alt`; the client substitutes an index per row. */
-  path: string;
-  label: string;
-  required: boolean;
-  /** From `.describe()`, when a schema carries one. */
-  help?: string;
-}
-
-export type Field =
-  | (FieldCommon & {
-      kind: "text";
-      /** No maxLength in the schema, so probably prose. Only picks the
-          control's starting height — see the note on rendering below. */
-      long: boolean;
-      maxLength?: number;
-      minLength?: number;
-      format?: string;
-      default?: string;
-    })
-  | (FieldCommon & {
-      kind: "number";
-      integer: boolean;
-      min?: number;
-      max?: number;
-      default?: number;
-    })
-  | (FieldCommon & { kind: "boolean"; default?: boolean })
-  | (FieldCommon & { kind: "select"; options: SelectOption[]; default?: string | number | boolean })
-  | (FieldCommon & { kind: "group"; fields: Field[] })
-  | (FieldCommon & { kind: "array"; item: Field });
+/* The descriptors themselves live in fields.ts — the browser half of the
+   editor needs them too, and it compiles under a different lib. */
+export type { Field, FieldCommon, SelectOption } from "./fields.js";
 
 export interface FormModelOptions {
   /** Template paths to leave out — `images[].w` and friends. The layouts

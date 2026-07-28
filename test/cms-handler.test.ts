@@ -146,8 +146,37 @@ describe("GET", () => {
     const body = await response.json();
     expect(body.who).toBe("shaahin69@gmail.com");
     expect(body.collections).toEqual([
-      { name: "home", label: "home", entries: ["home"] },
-      { name: "works", label: "works", entries: ["forgotten", "wordless"] }
+      { name: "home", label: "home", entries: [{ id: "home", label: "home" }] },
+      {
+        name: "works",
+        label: "works",
+        entries: [
+          { id: "forgotten", label: "forgotten" },
+          { id: "wordless", label: "wordless" }
+        ]
+      }
+    ]);
+  });
+
+  it("labels an entry from the site's config when it has one", async () => {
+    const bilingual = createContentHandler({
+      collections: {
+        works: {
+          schema,
+          dir: "src/content/works",
+          entryLabels: { forgotten: "Forgotten (English)" }
+        }
+      },
+      env
+    });
+    const response = await bilingual.GET(get("", { cookie: await cookie() }));
+    const body = await response.json();
+    /* Labelled where the site said so, and falling back to the file name
+       where it didn't — a half-filled entryLabels map must not blank out the
+       entries it doesn't mention. */
+    expect(body.collections[0].entries).toEqual([
+      { id: "forgotten", label: "Forgotten (English)" },
+      { id: "wordless", label: "wordless" }
     ]);
   });
 

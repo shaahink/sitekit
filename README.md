@@ -18,11 +18,42 @@ reference for how a site consumes it.
 | `@shaahink/sitekit/headers` | The dual header emitter: one config, emitted as `vercel.json` and Cloudflare `_headers`/`_redirects` |
 | `@shaahink/sitekit/seo` | Site URLs, canonicals and sitemaps from one source |
 | `@shaahink/sitekit/analytics` | The Umami tag |
-| `@shaahink/sitekit/cms` | The owner's editor: Google ID token verification, a signed session cookie, a form model generated from a collection's Zod schema, and a comment-preserving YAML writer that commits through the GitHub App |
+| `@shaahink/sitekit/cms` | The owner's editor, server side: Google ID token verification, a signed session cookie, a form model generated from a collection's Zod schema, and a comment-preserving YAML writer that commits through the GitHub App |
+| `@shaahink/sitekit/editor` | The owner's editor, browser side: `mountEditor(element)` builds the whole panel from the form model. Chrome included — see below |
+| `@shaahink/sitekit/editor/editor.css` | That panel's stylesheet, for a site to copy into `public/` |
 
 Entry points are separate on purpose: a site importing handlers never pulls in
 widget code, and the handler entries typecheck against WebWorker globals only —
 no DOM, no Node built-ins.
+
+### Why `./editor` ships chrome and `./widget` doesn't
+
+The widget appears on pages a visitor sees, so each site owns its DOM, strings
+and palette — that is PLAN goal 2, and it is a feature. The editor is one
+owner's admin panel on one route, and four hand-maintained copies of it is
+exactly what this package exists to prevent. CLAUDE.md's "no design system in
+the kit" rule was scoped on 2026-07-28 to say so: it governs public pages.
+Nobody's face is their admin panel.
+
+A site therefore gets no copy. It tunes the look with the `--sk-editor-*`
+custom properties — `bg`, `raise`, `ink`, `line`, `accent`, `font` are enough,
+because everything derived from them is a translucent overlay — and the words
+with `mountEditor(el, { strings })`. A site's whole editor surface is an
+`edit.astro` that mounts the panel and sets its own CSP, two `api/` edges that
+read environment variables, and a copied stylesheet. None of those change when
+the editor improves; that is the test the boundary has to keep passing.
+
+```js
+// src/pages/edit.astro
+import { mountEditor } from "@shaahink/sitekit/editor";
+const root = document.querySelector("[data-sk-editor]");
+if (root) mountEditor(root);
+```
+
+The stylesheet is **copied into `public/`, not imported**: Astro folds every
+processed stylesheet's hash into *every* page's CSP, so importing it would
+change the public pages' policy for no reason. `npm run editor` on each site
+copies it and CI diffs the result.
 
 ## The portability contract
 
@@ -83,9 +114,19 @@ machinery that already exists and is already tested.
 
 ```
 npm install
-npm run build   # tsc, two configs: server (WebWorker lib) + widget (DOM lib)
+npm run build   # tsc, three configs: server (WebWorker) + widget (DOM, ES2017)
+                # + editor (DOM, ES2020), then the editor's stylesheet is copied
 npm test        # vitest
 ```
+
+Three configs because the three halves have different floors. Handlers must not
+reach for `document` or a Node built-in, so they typecheck against WebWorker
+globals only. The widget ships on public pages and stays at ES2017 to reach as
+many visitors as the sites do. The editor is one route for one owner, so ES2020
+is honest — and it needs the lib as well as the syntax.
+
+`dist` is emptied before every build. `files: ["dist"]` publishes whatever is in
+there, and `tsc` only ever adds, so a moved file used to ship forever.
 
 Behaviours that look like oversights are deliberate and pinned by tests: the
 honeypot succeeds quietly, a 422 on issue creation retries without labels, a

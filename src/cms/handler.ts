@@ -59,10 +59,11 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
       if (!name) {
         const collections = [];
         for (const [key, config] of Object.entries(options.collections)) {
+          const ids = config.dir ? await listEntries(config.dir, access) : [entryOf(config)];
           collections.push({
             name: key,
             label: config.label ?? key,
-            entries: config.dir ? await listEntries(config.dir, access) : [entryOf(config)]
+            entries: ids.map((id) => ({ id, label: config.entryLabels?.[id] ?? id }))
           });
         }
         return json({ ok: true, who: gate.session?.email, collections });
