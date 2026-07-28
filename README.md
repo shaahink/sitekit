@@ -52,8 +52,16 @@ if (root) mountEditor(root);
 
 The stylesheet is **copied into `public/`, not imported**: Astro folds every
 processed stylesheet's hash into *every* page's CSP, so importing it would
-change the public pages' policy for no reason. `npm run editor` on each site
-copies it and CI diffs the result.
+change the public pages' policy for no reason. The kit ships the copier too —
+
+```
+sitekit-editor-css [destination]   # default public/editor-panel.css
+```
+
+— so a site's `package.json` reads `"editor": "sitekit-editor-css"` and CI runs
+it and diffs. A per-site copy script would have meant editing four repos the
+day the asset moved inside `dist`, which is exactly the boundary this lift
+exists to get right.
 
 ## The portability contract
 
