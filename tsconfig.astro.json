@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    /* Build-time code: this runs inside a site's Astro build, in Node, and
+       never in a browser or a request handler. It touches no platform API of
+       its own — it reads four properties off a resolved config and returns an
+       object — so no lib beyond the language itself is needed, and `types: []`
+       keeps it that way deliberately rather than by accident. */
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src/astro"]
+}

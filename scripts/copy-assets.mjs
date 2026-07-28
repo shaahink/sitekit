@@ -14,9 +14,16 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
+/* The .astro route is here for the same reason as the stylesheets and a
+   different one besides: tsc does not know the format, and neither should it —
+   a site's own Astro build compiles this file, which is the only way an
+   injected route can inherit that site's build.format, CSP and asset
+   pipeline. It ships as source on purpose. */
 const assets = [
   ["src/editor/editor.css", "dist/editor/editor.css"],
-  ["src/editor/inline.css", "dist/editor/inline.css"]
+  ["src/editor/inline.css", "dist/editor/inline.css"],
+  ["src/astro/edit.astro", "dist/astro/edit.astro"],
+  ["src/astro/virtual.d.ts", "dist/astro/virtual.d.ts"]
 ];
 
 for (const [from, to] of assets) {
