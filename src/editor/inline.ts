@@ -75,6 +75,12 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
   const dirty = new Dirty();
   const editables = new Map<string, Editable>();
+  /* Every listener this layer adds hangs off one signal, so leaving edit mode
+     removes all of them at once. It matters more than it looks: the click
+     suppressor on editable text inside a link would otherwise outlive edit
+     mode and leave the link dead until a reload. */
+  const listeners = new AbortController();
+  const on = { signal: listeners.signal } as const;
   const key = draftKey(collection, entry);
   let sha = "";
   let saving = false;
@@ -157,6 +163,16 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       continue;
     }
 
+    /* The same path twice — a marquee duplicated to hide its seam, a heading
+       repeated in a mobile and a desktop variant. Both would look editable and
+       only the last would be wired, so typing in the first would do nothing at
+       all. The first one wins and the rest say why. */
+    if (editables.has(path)) {
+      warn(path, "appears more than once on this page; only the first is editable");
+      element.dataset.skEditState = "panel";
+      continue;
+    }
+
     const verdict = judge(element, path, body.fields, body.values);
 
     if (verdict.kind === "broken") {
@@ -186,11 +202,18 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     element.setAttribute("aria-label", verdict.field.label);
     element.spellcheck = true;
 
-    element.addEventListener("focus", () => onFocus(path));
-    element.addEventListener("blur", () => onBlur(path));
-    element.addEventListener("input", () => onInput(path));
-    element.addEventListener("keydown", (event) => onKeydown(event, path));
-    if (!plaintext) element.addEventListener("paste", onPaste);
+    /* Editable text inside a link — Bruce's "Full biography →" button, and the
+       three lines inside his Showcase teaser — would otherwise navigate away
+       on the tap meant to start editing, losing whatever else was unsaved. */
+    if (element.closest("a")) {
+      element.addEventListener("click", (event) => event.preventDefault(), on);
+    }
+
+    element.addEventListener("focus", () => onFocus(path), on);
+    element.addEventListener("blur", () => onBlur(path), on);
+    element.addEventListener("input", () => onInput(path), on);
+    element.addEventListener("keydown", (event) => onKeydown(event, path), on);
+    if (!plaintext) element.addEventListener("paste", onPaste, on);
   }
 
   if (broken) bar.setNote(strings.inlineBrokenSome, { tone: "bad" });
@@ -218,7 +241,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
   }
 
   refresh();
-  window.addEventListener("beforeunload", onBeforeUnload);
+  window.addEventListener("beforeunload", onBeforeUnload, on);
 
   /* --- the state machine ------------------------------------------------ */
 
@@ -235,6 +258,17 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
     if (field.kind !== "text" && field.kind !== "number") {
       return { kind: "panel", reason: `is a ${field.kind} field`, label: field.label };
+    }
+
+    /* Only an element holding nothing but text can be edited in place.
+       `contenteditable` on one with element children lets a keystroke delete
+       them, and they are the design: Bruce's about paragraph renders its first
+       letter through a drop-cap <span>, and its textContent still equals the
+       stored value exactly — so the verbatim check below passes it and the
+       owner would watch the drop cap vanish as they typed. Caught by reading a
+       real site's markup rather than by using it. */
+    if (element.children.length) {
+      return { kind: "panel", reason: "wraps other elements", label: field.label };
     }
 
     const text = String(value);
@@ -503,7 +537,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
   function exit(): void {
     if (dirty.size && !confirm(strings.inlineLeaveWarning)) return;
-    window.removeEventListener("beforeunload", onBeforeUnload);
+    listeners.abort();
     for (const { element } of editables.values()) {
       element.removeAttribute("contenteditable");
       element.removeAttribute("role");
