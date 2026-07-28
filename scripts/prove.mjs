@@ -18,11 +18,16 @@
    other is sk-studio). It is also the site that carries every integration the
    kit ships, which is the point of a template.
 
+   The bins have the same problem for the same reason: `sitekit-headers` reads
+   a site's config from its cwd and writes a file the site commits, and nothing
+   a unit test can call proves that. So the proof runs it against the template
+   too and expects vercel.json not to move.
+
    Run it by hand before a release — `npm run proof`. Deliberately not part of
    `prepublishOnly`: publishing happens from CI through the npm Trusted
    Publisher, where there is no sibling checkout to build. */
 
-import { cpSync, existsSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,5 +64,39 @@ try {
   rmSync(backup, { recursive: true, force: true });
 }
 
-console.log(code === 0 ? "\nproof: the site builds against this kit" : "\nproof: FAILED");
-process.exit(code);
+/* The second half: the commands a site runs.
+   `sitekit-headers` regenerates a file the site commits, so the proof is that
+   running it changes nothing — the same shape CI uses, and the reason the six
+   copies of scripts/emit-headers.mjs could be deleted at all. The site's own
+   vercel.json is restored either way, so a failure leaves a message rather
+   than a dirty checkout.
+
+   Run through node directly rather than through node_modules/.bin: the shim
+   there belongs to the site's *installed* kit, which is not the code under
+   proof. The name that shim carries is checked by test/bin.test.ts instead. */
+const vercelJsonPath = join(site, "vercel.json");
+const committed = readFileSync(vercelJsonPath);
+let headers = 1;
+try {
+  const run = spawnSync(process.execPath, [join(kit, "bin", "headers.mjs")], {
+    cwd: site,
+    stdio: "inherit",
+    shell: false
+  });
+  const emitted = readFileSync(vercelJsonPath);
+  if (run.status !== 0) headers = run.status ?? 1;
+  else if (!emitted.equals(committed)) {
+    console.error("sitekit-headers rewrote vercel.json — the emitter and the committed file disagree");
+    headers = 1;
+  } else headers = 0;
+} finally {
+  writeFileSync(vercelJsonPath, committed);
+}
+
+const failed = code !== 0 || headers !== 0;
+console.log(
+  failed
+    ? "\nproof: FAILED"
+    : "\nproof: the site builds against this kit, and sitekit-headers reproduces its vercel.json"
+);
+process.exit(failed ? 1 : 0);
