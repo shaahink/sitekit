@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { COOKIE_NAME, clearSession, issueSession, readSession } from "../src/cms/session.js";
+import {
+  COOKIE_NAME,
+  clearSession,
+  issueSession,
+  readSession,
+  renewSession
+} from "../src/cms/session.js";
 
 const SECRET = "a-per-site-secret-that-nobody-else-has";
 const NOW = 1_753_650_000_000;
@@ -84,6 +90,53 @@ describe("readSession", () => {
     const cookie = await issueSession(IDENTITY, { secret: SECRET, now: NOW });
     const session = await readSession(echo(cookie), { secret: `${SECRET}-rotated`, now: NOW });
     expect(session).toBeNull();
+  });
+});
+
+describe("renewSession", () => {
+  /* An hour is short on a phone: an owner opens their page on the bus, is
+     interrupted, comes back after lunch and types. Sliding the expiry forward
+     while they are working is what stops the first sign of that being a save
+     that fails. */
+  async function sessionAt(now: number, maxAgeSeconds = 3600) {
+    const cookie = await issueSession(IDENTITY, { secret: SECRET, now, maxAgeSeconds });
+    const value = cookie.split(";")[0] as string;
+    return (await readSession(value, { secret: SECRET, now }))!;
+  }
+
+  it("leaves a fresh session alone", async () => {
+    const session = await sessionAt(NOW);
+    const renewed = await renewSession(session, { secret: SECRET, now: NOW + 60 * 1000 });
+    expect(renewed).toBeNull();
+  });
+
+  it("still leaves it alone one second before halfway", async () => {
+    const session = await sessionAt(NOW);
+    const justBefore = NOW + (1800 - 1) * 1000;
+    expect(await renewSession(session, { secret: SECRET, now: justBefore })).toBeNull();
+  });
+
+  it("mints a fresh hour once a session is past halfway", async () => {
+    const session = await sessionAt(NOW);
+    const past = NOW + 1801 * 1000;
+    const renewed = await renewSession(session, { secret: SECRET, now: past });
+    expect(renewed).toContain("Max-Age=3600");
+
+    /* The renewed cookie is a working session in its own right, carrying the
+       same person — not a re-signing of the old expiry. */
+    const value = (renewed as string).split(";")[0] as string;
+    const read = await readSession(value, { secret: SECRET, now: past });
+    expect(read).toMatchObject({ sub: IDENTITY.sub, email: IDENTITY.email });
+    expect(read!.exp).toBeGreaterThan(session.exp);
+  });
+
+  it("measures halfway against the site's own lifetime, not an assumed hour", async () => {
+    const session = await sessionAt(NOW, 600);
+    const options = { secret: SECRET, maxAgeSeconds: 600 };
+    expect(await renewSession(session, { ...options, now: NOW + 200 * 1000 })).toBeNull();
+    expect(await renewSession(session, { ...options, now: NOW + 400 * 1000 })).toContain(
+      "Max-Age=600"
+    );
   });
 });
 

@@ -27,6 +27,7 @@ import { Dirty } from "./dirty.js";
 import { cssEscape, el, labelled, link } from "./dom.js";
 import { loadGis } from "./gis.js";
 import { render, type RenderContext } from "./render.js";
+import { editHref, RETURN_PARAM, safeReturnPath } from "./return-to.js";
 import { defaultStrings, fill, type EditorStrings } from "./strings.js";
 import { plural } from "./values.js";
 
@@ -48,6 +49,8 @@ export interface EditorOptions {
 interface EntryRef {
   id: string;
   label: string;
+  /** Where this entry can be seen on the site, if the site said. */
+  url?: string;
 }
 
 interface CollectionRef {
@@ -82,6 +85,13 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
   const dirty = new Dirty();
 
+  /* Where the owner was when they were sent here to sign in. Validated in
+     return-to.ts: a site-relative path or nothing, because this ends up in
+     `location`. */
+  const returnTo = safeReturnPath(
+    new URLSearchParams(location.search).get(RETURN_PARAM)
+  );
+
   async function start(): Promise<void> {
     element.textContent = "";
     const status = el("p", "sk-editor__status", strings.loading);
@@ -108,6 +118,14 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       return;
     }
 
+    /* Signed in, and they only came here to do that — so finish the journey
+       rather than leaving them on a form. The panel is not what they asked
+       for; the sentence they tapped on their own page is. */
+    if (returnTo) {
+      location.replace(editHref(returnTo));
+      return;
+    }
+
     const body = (await session.json()) as Session;
     status.remove();
     chrome(body);
@@ -118,56 +136,78 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
   async function signIn(): Promise<void> {
     const card = el("div", "sk-editor__signin");
     card.append(el("h2", "sk-editor__title", strings.signInTitle));
+    element.append(card);
+    await mountGoogleButton(card, () => void start());
+  }
 
+  /** Google's button, in whatever container asked for it, calling back once
+      the session exists. Two callers: the sign-in screen, and the note under
+      a save that was refused because the session had lapsed — where the whole
+      point is that the owner signs in *without the page reloading*, because a
+      reload is what would lose the work this is promising to keep. */
+  async function mountGoogleButton(host: HTMLElement, onSignedIn: () => void): Promise<void> {
     const config = (await (await fetch(auth)).json()) as {
       configured?: boolean;
       clientId?: string;
     };
 
     if (!config.configured || !config.clientId) {
-      card.append(el("p", "sk-editor__note", strings.signInUnavailable));
-      element.append(card);
+      host.append(el("p", "sk-editor__note", strings.signInUnavailable));
       return;
     }
 
-    card.append(el("p", "sk-editor__note", strings.signInNote));
+    host.append(el("p", "sk-editor__note", strings.signInNote));
     const slot = el("div", "sk-editor__gbutton");
-    card.append(slot);
-    element.append(card);
+    host.append(slot);
 
     let gis;
     try {
       gis = await loadGis(gisSrc);
     } catch {
-      card.append(el("p", "sk-editor__error", strings.gisFailed));
+      host.append(el("p", "sk-editor__error", strings.gisFailed));
       return;
     }
 
     gis.accounts.id.initialize({
       client_id: config.clientId,
       callback: ({ credential }) => {
-        void submitCredential(credential, card);
+        void submitCredential(credential, host, onSignedIn);
       }
     });
     gis.accounts.id.renderButton(slot, {
       type: "standard",
       theme: "outline",
       size: "large",
-      text: "signin_with"
+      text: "signin_with",
+      /* Google renders this in an iframe at a width it is told, and its
+         default is a fixed ~200px that sits marooned in the middle of a phone
+         screen — the one control on the page, looking like an afterthought.
+         Filling the slot is what makes it read as the thing to press. The
+         range is Google's: it refuses anything outside 200–400. */
+      width: buttonWidth(slot)
     });
   }
 
-  async function submitCredential(credential: string | undefined, card: HTMLElement): Promise<void> {
+  function buttonWidth(slot: HTMLElement): number {
+    const available = slot.clientWidth || element.clientWidth;
+    return Math.max(200, Math.min(400, Math.round(available) || 320));
+  }
+
+  async function submitCredential(
+    credential: string | undefined,
+    host: HTMLElement,
+    onSignedIn: () => void
+  ): Promise<void> {
     const response = await fetch(auth, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ credential })
     });
     if (!response.ok) {
-      card.append(el("p", "sk-editor__error", await errorText(response, strings.signInFailed)));
+      host.append(el("p", "sk-editor__error", await errorText(response, strings.signInFailed)));
       return;
     }
-    await start();
+    onSignedIn();
   }
 
   /* --- the panel ------------------------------------------------------ */
@@ -188,8 +228,16 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     select.id = "sk-editor-collection";
     select.name = "collection";
 
+    /* Which entries can be seen on the site, so the link below can offer to
+       go and edit one in place. This is the *only* route to inline editing
+       that does not involve typing `?edit=1` into a URL bar, which is to say
+       the only one that exists on a phone. A site that has not declared its
+       entry URLs simply doesn't get the link. */
+    const urls = new Map<string, string>();
+
     for (const collection of session.collections) {
       for (const entry of collection.entries) {
+        if (entry.url) urls.set(`${collection.name}/${entry.id}`, entry.url);
         /* A multi-entry collection names the entry as well as the collection.
            On a bilingual site that is the whole safeguard against editing the
            French page believing it is the English one — so the entry's label
@@ -204,11 +252,26 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     }
     picker.append(labelled(strings.editing, select));
 
+    /* Rebuilt rather than kept and re-pointed: an anchor that is sometimes
+       there and sometimes not is one fewer state than an anchor that is
+       always there and sometimes lies about where it goes. */
+    const onPage = el("p", "sk-editor__onpage");
+    const showOnPage = (): void => {
+      onPage.textContent = "";
+      const url = urls.get(select.value);
+      if (url) onPage.append(link(editHref(url), strings.openPage));
+    };
+    picker.append(onPage);
+
     const form = el("div", "sk-editor__form");
     const footer = el("div", "sk-editor__footer");
     element.append(bar, picker, form, footer);
 
-    select.addEventListener("change", () => void load(select.value, form, footer));
+    select.addEventListener("change", () => {
+      showOnPage();
+      void load(select.value, form, footer);
+    });
+    showOnPage();
     void load(select.value, form, footer);
   }
 
@@ -256,7 +319,16 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     let sha = body.sha;
     save.addEventListener("click", () => {
-      void commit({ collection, entry, sha, form, save, note }).then((next) => {
+      void commit({
+        collection,
+        entry,
+        sha,
+        form,
+        save,
+        note,
+        resting: fill(strings.editingFile, { path: body.path }),
+        changed: context.changed
+      }).then((next) => {
         if (next) sha = next;
       });
     });
@@ -271,6 +343,12 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     form: HTMLElement;
     save: HTMLButtonElement;
     note: HTMLElement;
+    /** What the note says when nothing has gone wrong — restored after a
+        failure the owner has since dealt with. */
+    resting: string;
+    /** Puts the save button back to "Save 2 changes" from whatever the
+        failure left it saying. */
+    changed: () => void;
   }): Promise<string | null> {
     const { form, save, note } = args;
     save.disabled = true;
@@ -307,6 +385,26 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     save.disabled = false;
     save.textContent = strings.save;
+
+    /* Signed out mid-edit. Nothing typed is lost, because the form and
+       `dirty` both still hold it — which is exactly why signing in again
+       happens *here*, in a block under the button, rather than by sending the
+       owner to a sign-in page. A navigation would lose the work this is
+       promising to keep. Afterwards Save is simply pressable again.
+
+       Rare now that a session in use renews itself, and still reachable: a
+       rotated CMS_SESSION_SECRET signs everybody out mid-sentence. */
+    if (response.status === 401) {
+      note.textContent = strings.expired;
+      const again = el("div", "sk-editor__reauth");
+      note.after(again);
+      void mountGoogleButton(again, () => {
+        again.remove();
+        note.textContent = args.resting;
+        args.changed();
+      });
+      return null;
+    }
 
     /* Field-level messages go next to the field they are about; anything else
        goes under the button. */

@@ -92,6 +92,16 @@ async function cookie(email = "shaahin69@gmail.com"): Promise<string> {
   return set.split(";")[0] as string;
 }
 
+/** A cookie minted 50 minutes ago against a one-hour lifetime — still valid,
+    and past the halfway mark where the handler should slide it forward. */
+async function staleCookie(): Promise<string> {
+  const set = await issueSession(
+    { sub: "108134", email: "shaahin69@gmail.com", name: "Shahin Kiassat" },
+    { secret: SECRET, now: Date.now() - 50 * 60 * 1000 }
+  );
+  return set.split(";")[0] as string;
+}
+
 function get(params: string, headers: Record<string, string> = {}): Request {
   return new Request(`https://${HOST}/api/content${params}`, { headers: { host: HOST, ...headers } });
 }
@@ -138,6 +148,40 @@ describe("the gate", () => {
     );
     expect(response.status).toBe(403);
   });
+
+  /* Sliding the expiry forward while an owner is working is what stops "my
+     sign-in lapsed" being something they discover from a failed save. */
+  it("leaves a fresh session's cookie alone", async () => {
+    const response = await handler.GET(get("?collection=home", { cookie: await cookie() }));
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("renews a session that is past halfway, on a read", async () => {
+    const response = await handler.GET(get("?collection=home", { cookie: await staleCookie() }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=3600");
+  });
+
+  it("renews on a write too, so a long editing session never lapses mid-save", async () => {
+    const response = await handler.POST(
+      post(
+        { collection: "home", sha: "sha-original", edits: [{ path: "hero.tagline", value: "New" }] },
+        { cookie: await staleCookie() }
+      )
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=3600");
+  });
+
+  it("does not hand a removed account a fresh hour on its way out", async () => {
+    const removed = createContentHandler({
+      collections: { home: { schema, file: "src/content/pages/home.yaml" } },
+      env: { ...env, allowlist: "someone-else@example.com" }
+    });
+    const response = await removed.GET(get("?collection=home", { cookie: await staleCookie() }));
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+  });
 });
 
 describe("GET", () => {
@@ -178,6 +222,45 @@ describe("GET", () => {
       { id: "forgotten", label: "Forgotten (English)" },
       { id: "wordless", label: "wordless" }
     ]);
+  });
+
+  /* The panel's only way onto the page itself, which is the only way onto
+     inline editing that does not involve typing `?edit=1` into a phone's URL
+     bar. */
+  it("tells the panel where each entry can be seen on the site", async () => {
+    const linked = createContentHandler({
+      collections: {
+        home: { schema, file: "src/content/pages/home.yaml", entryUrl: { home: "/" } },
+        works: { schema, dir: "src/content/works", entryUrl: "/works/{entry}.html" }
+      },
+      env
+    });
+    const body = await (await linked.GET(get("", { cookie: await cookie() }))).json();
+    expect(body.collections[0].entries).toEqual([{ id: "home", label: "home", url: "/" }]);
+    expect(body.collections[1].entries).toEqual([
+      { id: "forgotten", label: "forgotten", url: "/works/forgotten.html" },
+      { id: "wordless", label: "wordless", url: "/works/wordless.html" }
+    ]);
+  });
+
+  it("omits a url rather than emitting one that leaves the site", async () => {
+    /* This value becomes an href the owner taps inside their own editor. Only
+       the site's own config writes it, and it is still checked. */
+    const bad = createContentHandler({
+      collections: {
+        home: { schema, file: "src/content/pages/home.yaml", entryUrl: "https://example.com/" },
+        works: { schema, dir: "src/content/works", entryUrl: "//example.com/{entry}" }
+      },
+      env
+    });
+    const body = await (await bad.GET(get("", { cookie: await cookie() }))).json();
+    expect(body.collections[0].entries[0]).toEqual({ id: "home", label: "home" });
+    expect(body.collections[1].entries[0]).toEqual({ id: "forgotten", label: "forgotten" });
+  });
+
+  it("says nothing about urls when the site hasn't declared any", async () => {
+    const body = await (await handler.GET(get("", { cookie: await cookie() }))).json();
+    expect(body.collections[0].entries[0]).toEqual({ id: "home", label: "home" });
   });
 
   it("returns the form model, the values and the sha to write against", async () => {

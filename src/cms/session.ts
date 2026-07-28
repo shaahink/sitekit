@@ -16,6 +16,12 @@ export const COOKIE_NAME = "sk_cms";
 
 const DEFAULT_MAX_AGE = 3600;
 
+/** Renew once a session is this far through its life. Half is the usual
+    choice and it is the right one here: an owner who is working keeps an
+    unexpired cookie without the server minting one on every keystroke's
+    worth of requests, and one who walks away still lapses on schedule. */
+const RENEW_AFTER = 0.5;
+
 export interface Session {
   sub: string;
   email: string;
@@ -85,6 +91,28 @@ export async function readSession(
     name: typeof claims.name === "string" ? claims.name : claims.email,
     exp: claims.exp
   };
+}
+
+/** A fresh `Set-Cookie` for a session that is past halfway, or null for one
+    with plenty of life left.
+    -------------------------------------------------------------------------
+    An hour is a short time on a phone. An owner opens their page on the bus,
+    is interrupted, comes back after lunch and types — and the first thing
+    that tells them the sign-in lapsed is a save that fails. The draft
+    survives that (see editor/drafts.ts), but the recovery is still: leave the
+    page, sign in, come back, accept the draft.
+
+    Sliding the expiry forward while they are actually working removes the
+    whole class of that. It is not a longer session: someone who stops using
+    the editor still lapses an hour after their last request. */
+export async function renewSession(
+  session: Session,
+  options: SessionOptions
+): Promise<string | null> {
+  const maxAge = options.maxAgeSeconds ?? DEFAULT_MAX_AGE;
+  const seconds = Math.floor((options.now ?? Date.now()) / 1000);
+  if (session.exp - seconds > maxAge * RENEW_AFTER) return null;
+  return issueSession(session, options);
 }
 
 /** Signing out: same attributes, no value, immediate expiry. The attributes

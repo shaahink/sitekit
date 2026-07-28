@@ -21,7 +21,7 @@ import { json } from "../feedback/http.js";
 import { ConflictError, listEntries, readFile, writeFile, type RepoAccess } from "./contents.js";
 import { formModel } from "./form.js";
 import { applyEdits, readValues, type Edit } from "./yaml.js";
-import { readSession, type Session } from "./session.js";
+import { readSession, renewSession, type Session } from "./session.js";
 import { allows } from "./allowlist.js";
 import type { CmsEnv, CollectionConfig, ContentHandlerOptions } from "./types.js";
 
@@ -41,7 +41,7 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
 
   async function GET(request: Request): Promise<Response> {
     const env = resolveEnv();
-    const gate = await authorize(request, env, false);
+    const gate = await authorize(request, env, false, options.sessionMaxAge);
     if (gate.response) return gate.response;
 
     const url = new URL(request.url);
@@ -63,10 +63,14 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
           collections.push({
             name: key,
             label: config.label ?? key,
-            entries: ids.map((id) => ({ id, label: config.entryLabels?.[id] ?? id }))
+            entries: ids.map((id) => ({
+              id,
+              label: config.entryLabels?.[id] ?? id,
+              ...(entryUrl(config, id) ? { url: entryUrl(config, id) } : {})
+            }))
           });
         }
-        return json({ ok: true, who: gate.session?.email, collections });
+        return withGate(json({ ok: true, who: gate.session?.email, collections }), gate);
       }
 
       const config = options.collections[name];
@@ -79,15 +83,18 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
       const file = await readFile(path, access);
       if (!file) return json({ ok: false, error: "That entry doesn't exist." }, 404);
 
-      return json({
-        ok: true,
-        collection: name,
-        entry,
-        path,
-        sha: file.sha,
-        fields: formModel(config.schema, { ...(config.omit ? { omit: config.omit } : {}) }),
-        values: readValues(file.text)
-      });
+      return withGate(
+        json({
+          ok: true,
+          collection: name,
+          entry,
+          path,
+          sha: file.sha,
+          fields: formModel(config.schema, { ...(config.omit ? { omit: config.omit } : {}) }),
+          values: readValues(file.text)
+        }),
+        gate
+      );
     } catch (error) {
       console.error("cms GET failed:", (error as Error).message);
       return json({ ok: false, error: "Couldn't load that content." }, 502);
@@ -96,7 +103,7 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
 
   async function POST(request: Request): Promise<Response> {
     const env = resolveEnv();
-    const gate = await authorize(request, env, true);
+    const gate = await authorize(request, env, true, options.sessionMaxAge);
     if (gate.response) return gate.response;
     const session = gate.session as Session;
 
@@ -183,7 +190,7 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
         { text: updated, sha: payload.sha, message: commitMessage(path, edits, session) },
         access
       );
-      return json({ ok: true, sha: written.sha, commit: written.commit });
+      return withGate(json({ ok: true, sha: written.sha, commit: written.commit }), gate);
     } catch (error) {
       if (error instanceof ConflictError) {
         return json(
@@ -204,9 +211,16 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
 interface Gate {
   response?: Response;
   session?: Session;
+  /** A `Set-Cookie` to append if the session was renewed on this request. */
+  cookie?: string;
 }
 
-async function authorize(request: Request, env: CmsEnv, checkOrigin: boolean): Promise<Gate> {
+async function authorize(
+  request: Request,
+  env: CmsEnv,
+  checkOrigin: boolean,
+  maxAgeSeconds?: number
+): Promise<Gate> {
   if (!env.sessionSecret || !env.repo || !hasCredential(env)) {
     return { response: json({ ok: false, error: "The editor is not configured yet." }, 503) };
   }
@@ -228,7 +242,22 @@ async function authorize(request: Request, env: CmsEnv, checkOrigin: boolean): P
     return { response: json({ ok: false, error: "That account can't edit this site." }, 403) };
   }
 
-  return { session };
+  /* Renewed after the allowlist check, never before: a removed account must
+     not be handed a fresh hour on its way out. */
+  const cookie = await renewSession(session, {
+    secret: env.sessionSecret,
+    ...(maxAgeSeconds !== undefined ? { maxAgeSeconds } : {})
+  });
+
+  return { session, ...(cookie ? { cookie } : {}) };
+}
+
+/** Attach a renewed session cookie, if the gate minted one. */
+function withGate(response: Response, gate: Gate): Response {
+  if (!gate.cookie) return response;
+  const headers = new Headers(response.headers);
+  headers.append("Set-Cookie", gate.cookie);
+  return new Response(response.body, { status: response.status, headers });
 }
 
 function hasCredential(env: CmsEnv): boolean {
@@ -257,6 +286,23 @@ function entryOf(config: CollectionConfig): string {
 function filePath(config: CollectionConfig, entry: string): string {
   if (config.dir) return `${config.dir.replace(/\/+$/, "")}/${entry}.yaml`;
   return config.file as string;
+}
+
+/** Where an entry can be seen on the site, so the panel can offer to go and
+    edit it in place. A pattern covers a collection whose URLs are regular
+    (`/projects/{entry}.html`); a map covers one whose aren't.
+
+    Only a site-relative path is ever emitted. This value ends up as an href
+    the owner taps, so an absolute URL here would be a link off the site
+    wearing the editor's clothes — refused rather than trusted, even though
+    the only writer is the site's own config. */
+function entryUrl(config: CollectionConfig, id: string): string | undefined {
+  const raw =
+    typeof config.entryUrl === "string"
+      ? config.entryUrl.replace("{entry}", id)
+      : config.entryUrl?.[id];
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return undefined;
+  return raw;
 }
 
 /** Readable in `git log` without opening the diff, and it names the human even

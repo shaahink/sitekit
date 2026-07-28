@@ -43,6 +43,16 @@ export interface EditorStrings {
   invalid: string;
   conflict: string;
   reload: string;
+  /** A save refused because the sign-in lapsed. Distinct from every other
+      failure, because it is the only one where the owner's work is safe and
+      the fix is one tap. */
+  expired: string;
+  expiredLink: string;
+  /** The panel's way onto the page an entry is showing — the only route to
+      inline editing that does not involve typing a query string. */
+  openPage: string;
+  /** Offered on the panel when the owner arrived from a page. */
+  backToPage: string;
 
   /* --- inline editing, on the site's own pages --------------------------- */
 
@@ -125,6 +135,12 @@ export const defaultStrings: EditorStrings = {
   invalid: "That change doesn't fit the content model.",
   conflict: "Someone else edited this since you opened it — reload and try again.",
   reload: "Reload",
+  /* Says the two things that matter in the order they matter: the work is
+     safe, and this is not something they broke. */
+  expired: "You were signed out while you were working. Nothing you typed is lost —",
+  expiredLink: "sign in again",
+  openPage: "Edit this page on the site",
+  backToPage: "Back to the page",
 
   /* Written to be read by someone who has never seen a CMS. Nothing here says
      "field", "commit", "deploy" or "collection"; an owner is changing the

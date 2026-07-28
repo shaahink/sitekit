@@ -46,6 +46,15 @@ export interface CollectionConfig {
       to someone who already knows, and the one mistake the editor must not
       make easy is editing the wrong locale believing it is the right one. */
   entryLabels?: Record<string, string>;
+  /** Where each entry can be seen on the site, so the panel can offer to go
+      and edit it in place — which is the only way an owner on a phone ever
+      reaches inline editing without typing `?edit=1` into a URL bar.
+
+      A string is a pattern with `{entry}` substituted
+      (`"/projects/{entry}.html"`); an object maps entry ids to paths
+      (`{ "home.fr": "/fr/" }`). Site-relative paths only; anything else is
+      dropped. */
+  entryUrl?: string | Record<string, string>;
 }
 
 export interface ContentHandlerOptions {

@@ -49,6 +49,7 @@ interface Node {
   const?: unknown;
   enum?: unknown[];
   default?: unknown;
+  title?: string;
   description?: string;
   maxLength?: number;
   minLength?: number;
@@ -76,11 +77,23 @@ function groupFields(node: Node, prefix: string, root: Node, omit: Set<string>):
 function walk(
   node: Node,
   path: string,
-  label: string,
+  fallbackLabel: string,
   required: boolean,
   root: Node,
   omit: Set<string>
 ): Field | null {
+  /* A schema may name its own field: `z.string().meta({ title: "Persian
+     name" })` reaches JSON Schema as `title`, and `title` is the standard
+     keyword for exactly this. It matters more than it sounds, because the
+     label is not only a form heading — the inline editor puts it in the bar
+     as "Changing Persian name", which is the whole of what tells an owner
+     what they are typing into.
+
+     Without it the label is the key humanized, and short keys make that
+     useless: `name.fa` reads as "Fa", `poem.html` as "Html". A site can fix
+     that here rather than by renaming the keys in its content files. */
+  const label = node.title ?? fallbackLabel;
+
   const common: FieldCommon = {
     path,
     label,

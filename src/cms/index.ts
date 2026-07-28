@@ -4,6 +4,7 @@ export { verifyIdToken, clearJwksCache, type GoogleIdentity, type VerifyOptions 
 export {
   issueSession,
   readSession,
+  renewSession,
   clearSession,
   COOKIE_NAME,
   type Session,

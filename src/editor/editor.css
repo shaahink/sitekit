@@ -122,6 +122,29 @@ body {
 
 .sk-editor__picker { margin-block: var(--sk-editor-gap); }
 
+/* The way onto the page itself. Deliberately given the same weight as the
+   picker rather than tucked in a corner: for an owner on a phone this is the
+   only route to inline editing that does not involve typing a query string,
+   and a route nobody finds is not a route. Sized for a thumb. */
+.sk-editor__onpage:empty { display: none; }
+.sk-editor__onpage {
+  margin-block-start: 0.75rem;
+}
+.sk-editor__onpage a {
+  display: inline-block;
+  min-height: 44px;
+  padding: 0.6rem 0;
+  font-size: 0.95rem;
+}
+
+/* Signing in again after a session lapsed mid-edit — inside the footer, where
+   the failed save is, because the work is still in the form above it and a
+   navigation would lose it. */
+.sk-editor__reauth {
+  flex-basis: 100%;
+  margin-block-start: 0.75rem;
+}
+
 /* Fields */
 .sk-editor__field { margin-block-end: var(--sk-editor-gap); }
 

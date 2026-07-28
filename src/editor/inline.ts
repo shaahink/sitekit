@@ -27,6 +27,7 @@ import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
 import { clearDraft, draftKey, readDraft, saveDraft, type Draft } from "./drafts.js";
 import { Bar } from "./inline-bar.js";
+import { signInHref } from "./return-to.js";
 import { defaultStrings, fill, type EditorStrings } from "./strings.js";
 import { coerce, findField, plural, valueAt } from "./values.js";
 
@@ -49,6 +50,9 @@ interface Editable {
   /** What the file says today. Updated on every successful save, so a second
       edit in the same session compares against the right thing. */
   original: string;
+  /** Whether this layer added `dir="auto"`, so leaving edit mode can put the
+      element back exactly as the site rendered it. */
+  addedDir: boolean;
 }
 
 /** What an annotated element turned out to be. Everything except `edit` is a
@@ -162,7 +166,11 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
   if (loaded.status === 401) {
     idle(strings.inlineSignIn);
-    bar.setNote("", { link: { href: editorPath, label: strings.inlineSignInLink } });
+    /* The link remembers this page, and the panel sends them back to it in
+       edit mode once they are in. Without that the owner signs in and lands
+       on a form, having to find their way back to the sentence they tapped —
+       on a phone, by typing `?edit=1` into the URL bar. */
+    bar.setNote("", { link: { href: signInBack(), label: strings.inlineSignInLink } });
     return;
   }
   if (loaded.status === 503) {
@@ -225,13 +233,17 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     }
 
     dirty.track(path, verdict.value);
-    editables.set(path, { element, path, field: verdict.field, original: verdict.value });
 
     element.setAttribute("contenteditable", plaintext ? "plaintext-only" : "true");
     element.dataset.skEditState = "idle";
-    /* The content's own direction, not the page's — a Farsi string being
-       edited inside an English chrome is nimagiti's normal case. */
-    element.setAttribute("dir", "auto");
+    const addedDir = useAutoDirection(element);
+    editables.set(path, {
+      element,
+      path,
+      field: verdict.field,
+      original: verdict.value,
+      addedDir
+    });
     element.setAttribute("role", "textbox");
     element.setAttribute("aria-label", verdict.field.label);
     element.spellcheck = true;
@@ -533,6 +545,22 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       return;
     }
 
+    /* The one failure where nothing is wrong and nothing is lost. The draft
+       was written as they typed, so signing in and coming back offers it
+       straight away — which is why this says so instead of showing the
+       generic "couldn't save" and letting an owner think their afternoon has
+       gone. Reached far less often now that a session in use renews itself,
+       and still reachable: a rotated secret signs everyone out at once. */
+    if (response.status === 401) {
+      persist();
+      bar.setNote(strings.expired, {
+        tone: "bad",
+        link: { href: signInBack(), label: strings.expiredLink }
+      });
+      refresh();
+      return;
+    }
+
     if (response.status === 409) {
       bar.setNote(strings.conflict, {
         tone: "bad",
@@ -580,6 +608,13 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     bar.setDiscardVisible(count > 0);
   }
 
+  /** The panel, told which page to send them back to. The hash goes along:
+      an owner two thirds of the way down a long page should come back to the
+      paragraph they were reading, not to the top of it. */
+  function signInBack(): string {
+    return signInHref(editorPath, `${location.pathname}${location.hash}`);
+  }
+
   function idle(text: string): void {
     bar.setStatus(text);
     bar.setSave(strings.save, false);
@@ -614,10 +649,11 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
   function exit(): void {
     if (dirty.size && !confirm(strings.inlineLeaveWarning)) return;
     listeners.abort();
-    for (const { element } of editables.values()) {
+    for (const { element, addedDir } of editables.values()) {
       element.removeAttribute("contenteditable");
       element.removeAttribute("role");
       element.removeAttribute("aria-label");
+      if (addedDir) element.removeAttribute("dir");
       delete element.dataset.skEditState;
     }
     for (const element of document.querySelectorAll<HTMLElement>("[data-sk-edit-state]")) {
@@ -645,6 +681,32 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 }
 
 /* --- small things ------------------------------------------------------- */
+
+/** `dir="auto"` so the caret and the text follow what is being typed rather
+    than the page's chrome — a Farsi string edited inside an English page is
+    the fleet's normal case, and bez's `hero.nameFa` is exactly it.
+
+    But only where it does not change how the text already looks. `auto` picks
+    a direction from the first *strong* character, and a string with none at
+    all falls back to LTR: nimagiti's stat figures are "۲۱+" in Persian
+    digits, which are bidi-neutral, so stamping `auto` on them moved the plus
+    sign 38 pixels across the page the instant edit mode started. Four numbers
+    on his live home page, silently rearranged by the tool meant to leave the
+    page alone.
+
+    So the site's rendering wins: set `auto`, keep it only if the computed
+    direction is unchanged, and report whether it stayed so `exit()` can leave
+    the element exactly as it found it.
+
+    @returns whether the attribute was added and should be removed on exit. */
+function useAutoDirection(element: HTMLElement): boolean {
+  if (element.hasAttribute("dir")) return false;
+  const before = getComputedStyle(element).direction;
+  element.setAttribute("dir", "auto");
+  if (getComputedStyle(element).direction === before) return true;
+  element.removeAttribute("dir");
+  return false;
+}
 
 /** Firefox only shipped `plaintext-only` in 136, and a site's owner may be on
     something older still. The fallback is `true` plus a paste handler, which

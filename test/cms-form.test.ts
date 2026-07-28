@@ -188,3 +188,50 @@ describe("formModel", () => {
     expect(() => formModel(z.string())).toThrow(/must be an object/);
   });
 });
+
+/* The label is not decoration. The inline editor puts it in the bar as
+   "Changing Persian name", and that sentence is the whole of what tells an
+   owner what they are typing into — so a key that humanizes to "Fa" or "Html"
+   is a real failure, and this is the way out of it that does not mean renaming
+   keys in the content files. */
+describe("a field's own name", () => {
+  it("prefers the schema's title to the key humanized", () => {
+    const schema = z.object({
+      fa: z.string().meta({ title: "Persian name" }),
+      en: z.string()
+    });
+    const fields = formModel(schema);
+    expect(fields.map((field) => field.label)).toEqual(["Persian name", "En"]);
+  });
+
+  it("names a group and its children independently", () => {
+    const schema = z.object({
+      poem: z.object({ html: z.string().meta({ title: "The poem" }) }).meta({ title: "Quotation" })
+    });
+    const [group] = formModel(schema);
+    expect(group?.label).toBe("Quotation");
+    if (group?.kind !== "group") throw new Error("unreachable");
+    expect(group.fields[0]?.label).toBe("The poem");
+  });
+
+  it("singularises a titled array for its row headings", () => {
+    const schema = z.object({
+      lines: z.array(z.string()).meta({ title: "Verses" })
+    });
+    const [array] = formModel(schema);
+    expect(array?.label).toBe("Verses");
+    if (array?.kind !== "array") throw new Error("unreachable");
+    expect(array.item.label).toBe("Verse");
+  });
+
+  it("leaves `describe` doing its own job", () => {
+    /* `description` is the help text under the input and always has been;
+       adding a title must not quietly reassign it. */
+    const schema = z.object({
+      email: z.string().meta({ title: "Where to write to" }).describe("Shown on the contact page")
+    });
+    const [field] = formModel(schema);
+    expect(field?.label).toBe("Where to write to");
+    expect(field?.help).toBe("Shown on the contact page");
+  });
+});

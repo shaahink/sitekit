@@ -18,6 +18,9 @@ export interface GisButtonOptions {
   theme: "outline" | "filled_blue" | "filled_black";
   size: "small" | "medium" | "large";
   text: "signin_with" | "signup_with" | "continue_with" | "signin";
+  /** Pixels. Google clamps this to 200–400 and defaults to about 200, which
+      on a phone is a small button adrift in the middle of the screen. */
+  width?: number;
 }
 
 interface Gis {
