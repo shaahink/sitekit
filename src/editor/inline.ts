@@ -64,6 +64,33 @@ type Verdict =
   | { kind: "panel"; why: "formatting" | "elsewhere"; reason: string; label: string }
   | { kind: "broken"; reason: string };
 
+/** Contexts whose contents are not spoken, so nothing inside may become a
+    focusable textbox. */
+const UNSPOKEN = '[aria-hidden="true"], [role="img"]';
+
+/** Contexts where a tap already means something else.
+    -------------------------------------------------------------------------
+    A real `<button>` and anything wearing a widget role, because the role is
+    the site telling us a click here runs its code. It is not pedantry: the
+    handler is usually delegated from the document, so `preventDefault` on the
+    element does not stop it, and a site that makes a div keyboard-operable
+    generally maps Space to a click — which means the owner cannot type a space
+    into the text they are editing. Bruce's showcase captions live inside
+    `role="button"` gallery cells that open the lightbox exactly that way. */
+const INTERACTIVE = [
+  "button",
+  '[role="button"]',
+  '[role="link"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[role="tab"]',
+  '[role="menuitem"]',
+  '[role="menuitemcheckbox"]',
+  '[role="menuitemradio"]',
+  '[role="option"]'
+].join(", ");
+
 export async function startInlineEditor(options: InlineOptions = {}): Promise<void> {
   const strings: EditorStrings = { ...defaultStrings, ...options.strings };
   const contentPath = options.contentPath ?? "/api/content";
@@ -274,18 +301,38 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
        fault than the missing convenience. Bruce's Persian watermark and his
        marquee are both in this position, and both were skipped by hand when
        his page was annotated — a rule the kit should keep rather than each
-       person who annotates a site. */
-    if (element.closest('[aria-hidden="true"]')) {
-      return { kind: "panel", why: "elsewhere", reason: "is inside aria-hidden", label: field.label };
+       person who annotates a site.
+
+       `role="img"` is the same fault by a different route: it declares its
+       whole subtree presentational and replaces it with the accessible name,
+       so an element inside one is just as unreachable by description while
+       still being reachable by tab. Bruce's showcase interlude is that. */
+    const unspoken = element.closest(UNSPOKEN);
+    if (unspoken) {
+      return {
+        kind: "panel",
+        why: "elsewhere",
+        reason: unspoken.matches('[aria-hidden="true"]') ? "is inside aria-hidden" : 'is inside role="img"',
+        label: field.label
+      };
     }
 
     /* Inside a control that does something when tapped. A link is fine — the
-       navigation is suppressed while editing — but a button runs the site's
+       navigation is suppressed while editing — but a control runs the site's
        own JavaScript, and there is no safe way to tell a click meant for the
-       button from one meant for the caret. Bruce's video facade is the case:
+       control from one meant for the caret. Bruce's video facade is the case:
        tapping its label swaps in the YouTube iframe. */
-    if (element.closest("button")) {
-      return { kind: "panel", why: "elsewhere", reason: "is inside a button", label: field.label };
+    const control = element.closest(INTERACTIVE);
+    if (control) {
+      return {
+        kind: "panel",
+        why: "elsewhere",
+        reason:
+          control.localName === "button"
+            ? "is inside a button"
+            : `is inside role="${control.getAttribute("role")}"`,
+        label: field.label
+      };
     }
 
     /* Only an element holding nothing but text can be edited in place.
