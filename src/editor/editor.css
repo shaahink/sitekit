@@ -468,3 +468,148 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .sk-editor * { transition: none !important; }
 }
+
+/* --- the owner's home (7.7) ------------------------------------------------
+   Above the picker: what this is, did anyone come, did my last change go live.
+   Everything below the first-run panel is optional and simply absent when the
+   data did not arrive, so every rule here has to look right with any of its
+   siblings missing — hence blocks that carry their own spacing rather than a
+   container that distributes it. */
+
+.sk-editor__home { margin-block-end: var(--sk-editor-gap); }
+
+.sk-editor__welcome[hidden] { display: none; }
+
+.sk-editor__welcome {
+  padding: var(--sk-editor-gap);
+  border: 1px solid var(--sk-editor-line);
+  border-radius: var(--sk-editor-radius);
+  background: var(--sk-editor-raise);
+}
+
+.sk-editor__welcometitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--sk-editor-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.sk-editor__welcometext {
+  margin: 0 0 0.6rem;
+  max-inline-size: 42em;
+  color: var(--sk-editor-dim);
+  line-height: 1.55;
+}
+
+.sk-editor__welcomeclose {
+  margin-block-start: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--sk-editor-line);
+  border-radius: var(--sk-editor-radius);
+  background: transparent;
+  color: var(--sk-editor-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The way back to it. A circle in the corner rather than a line of text: it is
+   for the second visit, and it should be findable without being a feature. */
+.sk-editor__help {
+  float: inline-end;
+  inline-size: 1.9rem;
+  block-size: 1.9rem;
+  border: 1px solid var(--sk-editor-line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sk-editor-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sk-editor__blocks {
+  display: grid;
+  gap: var(--sk-editor-gap);
+  margin-block-start: var(--sk-editor-gap);
+}
+
+.sk-editor__blocktitle {
+  margin: 0 0 0.5rem;
+  font-family: var(--sk-editor-display);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.sk-editor__blocksub {
+  margin: 0.9rem 0 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sk-editor-muted);
+}
+
+.sk-editor__stats,
+.sk-editor__pages,
+.sk-editor__changes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-editor__stat,
+.sk-editor__page,
+.sk-editor__changeitem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: baseline;
+  padding-block: 0.35rem;
+}
+
+.sk-editor__changeitem + .sk-editor__changeitem { border-block-start: 1px solid var(--sk-editor-line-soft); }
+
+.sk-editor__statvalue { font-size: 1.05rem; }
+
+/* Up and down are stated in words as well as colour — `{percent}%` carries its
+   own sign — so the colour is reinforcement rather than the only signal. */
+.sk-editor__change { font-size: 0.85rem; color: var(--sk-editor-muted); }
+.sk-editor__change--up { color: #7fb08a; }
+.sk-editor__change--down { color: #c98b8b; }
+
+.sk-editor__page { color: var(--sk-editor-dim); font-size: 0.92rem; }
+
+.sk-editor__changewhen,
+.sk-editor__changetext { font-size: 0.92rem; }
+.sk-editor__changewhen { color: var(--sk-editor-muted); }
+
+.sk-editor__deploy {
+  margin: 0 0 0.6rem;
+  font-size: 0.92rem;
+  color: var(--sk-editor-dim);
+}
+.sk-editor__deploy--success { color: #7fb08a; }
+.sk-editor__deploy--pending { color: var(--sk-editor-dim); }
+.sk-editor__deploy--failure,
+.sk-editor__deploy--error { color: #c98b8b; }
+
+.sk-editor__empty {
+  margin: 0;
+  color: var(--sk-editor-muted);
+  line-height: 1.55;
+}
+
+.sk-editor__homeactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  align-items: baseline;
+  margin-block: var(--sk-editor-gap) 0;
+}
+
+.sk-editor__requestform {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+  inline-size: 100%;
+  margin-block-start: 0.5rem;
+}
+
+.sk-editor__requestform .sk-editor__textarea { inline-size: 100%; }

@@ -29,7 +29,21 @@
       nothing here can schedule its own refresh. The cache is therefore a
       conservative TTL *plus* a single silent retry when the instance says 401 —
       belt and braces, because the failure mode of guessing the lifetime wrong
-      is a dashboard that shows an error instead of a number. */
+      is a dashboard that shows an error instead of a number.
+   4. **The page metric is `type=path`, not `type=url`.** `type=url` is v2's
+      spelling and v3 answers it with a bare `400 Bad request` — no mention of
+      the parameter, nothing to search for. Measured 2026-07-28: `type=path`
+      returns `[{"x":"/","y":5},{"x":"/about.html","y":1}]` for the same
+      request. Added when 7.7's owner's home needed one site's top pages.
+
+   And one thing that is *not* a trap, measured the same day and worth knowing
+   because it decides how many variables a site needs: **the per-website routes
+   work by id alone.** `/api/websites/{id}`, `/api/websites/{id}/stats` and
+   `/api/websites/{id}/metrics` all answer 200 for the view-only account with
+   no team lookup first, and answer **401** for an id the team does not own —
+   so the id is safe to hold in a site's repo, the team is needed only for
+   enumeration, and an owner's home carries three variables where the fleet
+   dashboard carries four. */
 
 /** Where the instance is and who is reading it. */
 export interface StatsCredential {
@@ -38,8 +52,13 @@ export interface StatsCredential {
   username: string;
   password: string;
   /** The team that owns the websites. See note 1 — without this there is
-      nothing to enumerate, however valid the login is. */
-  teamId: string;
+      nothing to *enumerate*, however valid the login is.
+      Optional because enumeration is only one of the two things this module
+      does: an owner's home reads one known website by id and never lists
+      anything, so requiring a team id there would be asking a site to
+      configure a value it has no use for. `teamWebsites` says so if it is
+      missing; nothing else needs it. */
+  teamId?: string;
   userAgent?: string;
 }
 
@@ -99,6 +118,19 @@ interface CachedToken {
 
 const cache = new Map<string, CachedToken>();
 
+/* One login at a time per instance, however many readers arrive together.
+   ---------------------------------------------------------------------------
+   The cache alone is not enough, and 7.7's owner's home is what found it: that
+   panel asks for the site record and two windows *concurrently*, so on a cold
+   instance all three miss the cache in the same tick and all three post the
+   password. Three logins to answer one page, and the fleet dashboard grows the
+   same shape the moment anything fans out before its first read.
+
+   So a mint in progress is joined rather than duplicated. It is not only about
+   the round-trips: repeatedly posting a password that a rate limiter is
+   watching is a good way to turn a slow page into a locked account. */
+const inflight = new Map<string, Promise<string>>();
+
 /** A bearer token for the instance, minted or cached. */
 export async function statsToken(credential: StatsCredential): Promise<string> {
   const key = `${credential.baseUrl}/${credential.username}`;
@@ -107,7 +139,15 @@ export async function statsToken(credential: StatsCredential): Promise<string> {
   return mint(credential, key);
 }
 
-async function mint(credential: StatsCredential, key: string): Promise<string> {
+function mint(credential: StatsCredential, key: string): Promise<string> {
+  const pending = inflight.get(key);
+  if (pending) return pending;
+  const promise = login(credential, key).finally(() => inflight.delete(key));
+  inflight.set(key, promise);
+  return promise;
+}
+
+async function login(credential: StatsCredential, key: string): Promise<string> {
   const response = await fetch(`${credential.baseUrl}/api/auth/login`, {
     method: "POST",
     headers: {
@@ -128,6 +168,7 @@ async function mint(credential: StatsCredential, key: string): Promise<string> {
 /** Test seam, and the way a caller forces a fresh login. */
 export function clearStatsTokenCache(): void {
   cache.clear();
+  inflight.clear();
 }
 
 /* Every read goes through here so the 401 retry exists in exactly one place.
@@ -166,6 +207,9 @@ async function read(credential: StatsCredential, path: string): Promise<any> {
     and a silently truncated list is a site that stops being measured without
     anything saying so. */
 export async function teamWebsites(credential: StatsCredential): Promise<StatsWebsite[]> {
+  if (!credential.teamId) {
+    throw new Error("umami: teamId is required to list websites — see StatsCredential");
+  }
   const websites: StatsWebsite[] = [];
   let page = 1;
   for (;;) {
@@ -202,6 +246,105 @@ export async function websiteStats(
   return {
     current: totals(body),
     previous: totals(body.comparison ?? {})
+  };
+}
+
+/** One website's own record, by id.
+    ---------------------------------------------------------------------------
+    The `shareId` is why this exists. Every owner already has a permanent
+    read-only Share URL (SHAHIN.md #5) and it was going to be a per-site
+    variable — until the instance turned out to hand it over with the name and
+    the domain, for the same request. Configuration that can be read from the
+    thing it describes is configuration that can go stale, so it isn't held. */
+export async function websiteInfo(
+  credential: StatsCredential,
+  websiteId: string
+): Promise<StatsWebsite> {
+  const site = (await read(credential, `/api/websites/${websiteId}`)) as {
+    id: string;
+    name: string;
+    domain: string;
+    shareId?: string | null;
+  };
+  return { id: site.id, name: site.name, domain: site.domain, shareId: site.shareId ?? null };
+}
+
+/** The pages people actually read, most-read first.
+    ---------------------------------------------------------------------------
+    `type=path`, not `type=url` — see note 4. Umami answers `[{x, y}]`, which is
+    a chart's shape rather than a reader's; it comes back named. */
+export async function websitePages(
+  credential: StatsCredential,
+  websiteId: string,
+  range: { startAt: number; endAt: number },
+  limit = 3
+): Promise<Array<{ path: string; views: number }>> {
+  const rows = (await read(
+    credential,
+    `/api/websites/${websiteId}/metrics?type=path&startAt=${range.startAt}&endAt=${range.endAt}`
+  )) as Array<{ x?: string; y?: number }>;
+
+  return rows
+    .filter((row) => typeof row.x === "string")
+    .map((row) => ({ path: row.x as string, views: row.y ?? 0 }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, limit);
+}
+
+export interface OwnerTraffic {
+  readAt: string;
+  /** The site as the instance knows it, `shareId` included. */
+  site: StatsWebsite;
+  /** Keyed by window length in days, because the panel shows two of them and
+      an owner reads "this week" and "this month" rather than a date range. */
+  windows: Array<{ days: number; current: StatsTotals; previous: StatsTotals; visitorChange: number | null }>;
+  /** Most-read pages over the *longest* window asked for — three pages over a
+      week is usually one page and two rounding errors. */
+  pages: Array<{ path: string; views: number }>;
+}
+
+/** Everything one owner's home shows, in one call.
+    ---------------------------------------------------------------------------
+    The single-site sibling of `fleetTraffic`, and it fails the same way on
+    purpose: **it doesn't**. A site whose instance is unwell, or whose id is
+    wrong, must not take the editor down with it — the caller renders whatever
+    came back and omits the rest, because an owner who came to fix a typo
+    should never be shown an analytics error. That is why the pages read is
+    settled rather than awaited: it is the one part that can fail on its own,
+    and losing three page names is not worth losing the visitor count.
+
+    `now` is injectable so a test can pin the window. */
+export async function ownerTraffic(
+  credential: StatsCredential,
+  websiteId: string,
+  options: { days?: number[]; now?: number } = {}
+): Promise<OwnerTraffic> {
+  const spans = (options.days ?? [7, 30]).slice().sort((a, b) => a - b);
+  const endAt = options.now ?? Date.now();
+  const longest = spans[spans.length - 1] ?? 30;
+
+  const [site, ...rest] = await Promise.all([
+    websiteInfo(credential, websiteId),
+    ...spans.map((days) => websiteStats(credential, websiteId, { startAt: endAt - days * 864e5, endAt }))
+  ]);
+
+  const pages = await Promise.allSettled([
+    websitePages(credential, websiteId, { startAt: endAt - longest * 864e5, endAt })
+  ]);
+
+  return {
+    readAt: new Date(endAt).toISOString(),
+    site: site as StatsWebsite,
+    windows: spans.map((days, index) => {
+      const stats = rest[index] as { current: StatsTotals; previous: StatsTotals };
+      return {
+        days,
+        current: stats.current,
+        previous: stats.previous,
+        visitorChange: percentChange(stats.current.visitors, stats.previous.visitors)
+      };
+    }),
+    pages: pages[0]?.status === "fulfilled" ? pages[0].value : []
   };
 }
 

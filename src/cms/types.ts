@@ -29,6 +29,15 @@ export interface CmsEnv {
   /** Defaults to the repo's default branch. */
   branch?: string | undefined;
   allowedOrigin?: string | undefined;
+
+  /* The owner's own traffic, for the home panel (7.7). Three variables and not
+     four: the fleet dashboard needs a team to enumerate through, and this
+     reads one website by id, which the instance serves without one. All three
+     absent is a supported state — the panel simply has no traffic block, which
+     is the whole of "degrade quietly". */
+  umamiUrl?: string | undefined;
+  umamiUsername?: string | undefined;
+  umamiPassword?: string | undefined;
 }
 
 export interface CollectionConfig {
@@ -72,6 +81,20 @@ export interface ContentHandlerOptions {
   collections: Record<string, CollectionConfig>;
   env: CmsEnv | (() => CmsEnv);
   userAgent?: string;
+  /** This site's id in the analytics instance.
+
+      Not an environment variable, deliberately: it is already public — the
+      page's own tracker tag carries it — and an id that is in the markup but
+      also in a deployment's configuration is two copies of one fact. It goes
+      beside the layout that emits it, and both read the same constant. Only
+      the login is a secret, and that is in `env`.
+
+      Without it there is no traffic block; nothing else changes. */
+  umamiWebsiteId?: string;
+  /** Where "request a change" files its issue, if not this repo. Left alone,
+      it is the same repository the content lives in, which is where the
+      review widget already files. */
+  requestLabel?: string;
   /** How long a sign-in lasts, in seconds. An hour by default. */
   sessionMaxAge?: number;
   /** Ceilings on what one save may carry in photographs. The defaults are in

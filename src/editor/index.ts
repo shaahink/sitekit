@@ -26,6 +26,7 @@ import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
 import { cssEscape, el, labelled, link } from "./dom.js";
 import { loadGis } from "./gis.js";
+import { home, type HomeData } from "./home.js";
 import { render, Uploads, type RenderContext } from "./render.js";
 import { editHref, RETURN_PARAM, safeReturnPath } from "./return-to.js";
 import { defaultStrings, fill, type EditorStrings } from "./strings.js";
@@ -264,9 +265,28 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     };
     picker.append(onPage);
 
+    /* Above the picker, because it is what an owner arrives with: what is
+       this, did anyone come, did my last change go live. It is built empty and
+       filled when its data lands — the form must never wait on analytics. */
+    const owner = home({
+      strings,
+      onRequest: (text) => sendRequest(text)
+    });
+
     const form = el("div", "sk-editor__form");
     const footer = el("div", "sk-editor__footer");
-    element.append(bar, picker, form, footer);
+    element.append(bar, owner.element, picker, form, footer);
+
+    /* Not awaited, and its failure is swallowed on purpose. 7.7: "a slow or
+       dead Umami cannot delay the form rendering — load it after, and let it
+       fail silently." An owner who came to fix a typo should not be told about
+       an analytics outage. */
+    void fetch(`${content}?home`, { headers: { Accept: "application/json" } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: (HomeData & { ok?: boolean }) | null) => {
+        if (body?.ok) owner.setData(body);
+      })
+      .catch(() => {});
 
     select.addEventListener("change", () => {
       showOnPage();
@@ -455,6 +475,22 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       note.append(" ", again);
     }
     return null;
+  }
+
+  /** "Ask for a change" — the same edge as a save, and the only POST here that
+      writes nothing to the content. Rejects with a message worth reading; the
+      panel keeps whatever was typed either way. */
+  async function sendRequest(text: string): Promise<string> {
+    const response = await fetch(content, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request: { text, page: location.pathname } })
+    });
+    if (!response.ok) {
+      throw new Error(await errorText(response, strings.homeRequestFailed));
+    }
+    const body = (await response.json()) as { request?: { url?: string } };
+    return body.request?.url ?? "";
   }
 
   async function errorText(response: Response, fallback: string): Promise<string> {

@@ -18,8 +18,8 @@ reference for how a site consumes it.
 | `@shaahink/sitekit/headers` | The dual header emitter: one config, emitted as `vercel.json` and Cloudflare `_headers`/`_redirects` |
 | `@shaahink/sitekit/seo` | Site URLs, canonicals and sitemaps from one source |
 | `@shaahink/sitekit/analytics` | The Umami tag |
-| `@shaahink/sitekit/stats` | Reading that instance back, server side: a cached login, team-scoped enumeration, and per-site totals with the previous period alongside |
-| `@shaahink/sitekit/cms` | The owner's editor, server side: Google ID token verification, a signed session cookie, a form model generated from a collection's Zod schema, and a comment-preserving YAML writer that commits through the GitHub App |
+| `@shaahink/sitekit/stats` | Reading that instance back, server side: a single-flight cached login, team-scoped enumeration for a fleet, and one site's totals, top pages and share link for its owner |
+| `@shaahink/sitekit/cms` | The owner's editor, server side: Google ID token verification, a signed session cookie, a form model generated from a collection's Zod schema, a comment-preserving YAML writer that commits through the GitHub App, and the owner's home — their traffic, their recent changes, whether the last one is live |
 | `@shaahink/sitekit/visibility` | Reading a section's `visible` flag the one safe way — a missing flag means *shown* |
 | `@shaahink/sitekit/editor` | The owner's editor, browser side: `mountEditor(element)` builds the whole panel from the form model. Chrome included — see below |
 | `@shaahink/sitekit/editor/inline` | Editing the words on the page they are on: `startInlineEditor()`, driven by the `data-sk-edit` annotations |
@@ -191,6 +191,14 @@ Behaviours that look like oversights are deliberate and pinned by tests: the
 honeypot succeeds quietly, a 422 on issue creation retries without labels, a
 failed screenshot upload never loses the comment, and the rate limiter sweeps
 its whole map above 500 addresses.
+
+The owner's home (`?home` on the content edge) adds three: every block is
+**settled independently**, so a dead analytics instance costs the traffic
+numbers and not the change list; the analytics **share link is derived** from
+the instance's own `shareId` rather than configured, because configuration that
+can be read from the thing it describes is configuration that can go stale; and
+a failed deploy is reported in **the host's own words**, since "Deployment rate
+limited — retry in 24 hours" is actionable where "something went wrong" is not.
 
 In `./cms` the same is true of four more: the form model is generated in Zod's
 **input** mode, because a content file may legitimately omit a defaulted field

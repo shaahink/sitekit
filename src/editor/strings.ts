@@ -143,6 +143,60 @@ export interface EditorStrings {
   inlineDraftDiscard: string;
   inlineDraftStale: string;
   inlineLeaveWarning: string;
+
+  /* --- the owner's home (7.7) -------------------------------------------- */
+
+  /** The first-run panel. Three sentences and a button, not a tour: what this
+      is, that nothing is permanent, and where to ask for something bigger.
+      Written to be read once by someone who has never seen an editor and does
+      not want to learn one. */
+  homeWelcomeTitle: string;
+  homeWelcomeBody: string;
+  homeWelcomeUndo: string;
+  homeWelcomeAsk: string;
+  homeWelcomeClose: string;
+  /** The "?" that brings it back. */
+  homeHelp: string;
+  homeHelpTitle: string;
+
+  homeTrafficTitle: string;
+  /** `{visitors}` `{views}` `{days}` — already pluralised by the caller. */
+  homeTrafficLine: string;
+  /** `{percent}` — carries its own sign. */
+  homeTrafficChange: string;
+  homeTrafficNone: string;
+  homePagesTitle: string;
+  /** `{path}` `{views}`. */
+  homePageLine: string;
+  homeShareLink: string;
+
+  homeChangesTitle: string;
+  homeChangesNone: string;
+  homeChangeDetail: string;
+  homeDeployLive: string;
+  homeDeployBuilding: string;
+  /** `{reason}` — the host's own words, which beat anything written here. */
+  homeDeployFailed: string;
+
+  homeRequestOpen: string;
+  homeRequestTitle: string;
+  homeRequestPlaceholder: string;
+  homeRequestNote: string;
+  homeRequestSend: string;
+  homeRequestSending: string;
+  homeRequestSent: string;
+  homeRequestSeeIt: string;
+  homeRequestFailed: string;
+
+  cancel: string;
+  visitor: string;
+  visitors: string;
+  view: string;
+  views: string;
+  today: string;
+  yesterday: string;
+  /** `{days}`. */
+  daysAgo: string;
 }
 
 export const defaultStrings: EditorStrings = {
@@ -240,7 +294,62 @@ export const defaultStrings: EditorStrings = {
   inlineDraftDiscard: "Discard",
   inlineDraftStale:
     "You had unsaved changes here, but the page has been edited somewhere else since. They've been dropped rather than written over that.",
-  inlineLeaveWarning: "You have changes that haven't been saved yet."
+  inlineLeaveWarning: "You have changes that haven't been saved yet.",
+
+  /* --- the owner's home -------------------------------------------------- */
+
+  /* Voice, and it is the whole of Decision 2: say what this is, say that
+     nothing is permanent, say where to ask for more, get out of the way. No
+     welcome tour, no exclamation marks, and no word that assumes the reader
+     has ever seen a content management system — "published", "deploy",
+     "commit" and "repository" are all absent on purpose. */
+  homeWelcomeTitle: "This is where you change your site",
+  homeWelcomeBody:
+    "Everything you type here goes onto your real website, usually within a minute or two. You can also tap the words on your own pages and type over them.",
+  homeWelcomeUndo:
+    "Nothing you do here is permanent. Every change is kept, so anything can be put back the way it was — just ask.",
+  homeWelcomeAsk:
+    "For anything bigger than words and pictures — a new section, a different layout — use “Ask for a change” below and describe what you want.",
+  homeWelcomeClose: "Got it",
+  homeHelp: "?",
+  homeHelpTitle: "What is this?",
+
+  homeTrafficTitle: "Did anyone come?",
+  homeTrafficLine: "{visitors} and {views} in the last {days} days",
+  homeTrafficChange: "{percent}% on the {days} days before",
+  /* A new site's honest answer, and it should not read like a fault. */
+  homeTrafficNone: "Nobody yet. That's normal for a site that's just gone up.",
+  homePagesTitle: "Most read",
+  homePageLine: "{path} — {views}",
+  homeShareLink: "See all your visitor numbers",
+
+  homeChangesTitle: "What you changed",
+  homeChangesNone: "Nothing changed yet. Pick a page below and try something — you can always put it back.",
+  homeChangeDetail: "See exactly what changed",
+  homeDeployLive: "Your last change is on the site.",
+  homeDeployBuilding: "Your last change is going up now — give it a minute, then reload your site.",
+  /* The host's own sentence, quoted. "Deployment rate limited — retry in 24
+     hours" tells somebody what to do; "something went wrong" does not. */
+  homeDeployFailed: "Your last change hasn't gone up yet: {reason}",
+
+  homeRequestOpen: "Ask for a change",
+  homeRequestTitle: "What would you like changed?",
+  homeRequestPlaceholder: "A new section for workshops, with three photographs and a paragraph…",
+  homeRequestNote: "This goes straight to Shahin. Describe it however you like.",
+  homeRequestSend: "Send",
+  homeRequestSending: "Sending…",
+  homeRequestSent: "Sent. You'll hear back.",
+  homeRequestSeeIt: "Follow it here",
+  homeRequestFailed: "Couldn't send that just now. Your words are still here — try again in a moment.",
+
+  cancel: "Cancel",
+  visitor: "visitor",
+  visitors: "visitors",
+  view: "view",
+  views: "views",
+  today: "today",
+  yesterday: "yesterday",
+  daysAgo: "{days} days ago"
 };
 
 /** `fill("Editing {path}", { path: "home.yaml" })`. Absent keys are left as

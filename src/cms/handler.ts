@@ -2,7 +2,16 @@
    ---------------------------------------------------------------------------
    GET  ?collection=&entry=   the form model, the current values, the blob sha
    GET  (no params)           the collections and entries this site exposes
+   GET  ?home                 the owner's home: traffic, recent changes,
+                              whether the last one is live, their review link
    POST {collection, entry, edits, sha}   validate, commit, report the commit
+   POST {request: {text, page}}           file a content request as an issue
+
+   The last two of those arrived with 7.7 and are here rather than in an
+   endpoint of their own for one reason: a second `api/` file is a second file
+   in every site repo, and the last per-site editor file cost four client-repo
+   commits in an afternoon (SCALE.md §9). A site gains no file for the owner's
+   home.
 
    Two rules here are load-bearing:
 
@@ -22,6 +31,8 @@ import { ConflictError, listEntries, readFile, writeFile, type RepoAccess } from
 import { commitFiles } from "./tree.js";
 import { prepareUploads, resolveUploads, UploadError, type PreparedUpload } from "./uploads.js";
 import { formModel } from "./form.js";
+import { ownerHome } from "./home.js";
+import { fileRequest, RequestError } from "./requests.js";
 import { applyEdits, readValues, type Edit } from "./yaml.js";
 import { readSession, renewSession, type Session } from "./session.js";
 import { allows } from "./allowlist.js";
@@ -62,6 +73,18 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
     }
 
     try {
+      /* The owner's home: their traffic, their recent changes, whether the
+         last one is live, and the review link they were sent separately. It
+         hangs off this route rather than one of its own so that no site gains
+         a file — see home.ts. */
+      if (url.searchParams.get("home") !== null) {
+        const home = await ownerHome(access, options.collections, env, {
+          ...(options.umamiWebsiteId ? { umamiWebsiteId: options.umamiWebsiteId } : {}),
+          userAgent
+        });
+        return withGate(json({ ok: true, who: gate.session?.email, ...home }), gate);
+      }
+
       /* No collection named: the panel is asking what there is to edit. */
       if (!name) {
         const collections = [];
@@ -123,11 +146,42 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
           `upload:<id>`. The client never names a repository path — see
           uploads.ts for why that is the whole shape of this. */
       uploads?: unknown;
+      /** "Ask for something bigger" — a different kind of save entirely, and
+          the only POST here that writes nothing to the content. */
+      request?: { text?: string; page?: string };
     };
     try {
       payload = (await request.json()) as typeof payload;
     } catch {
       return json({ ok: false, error: "Malformed request." }, 400);
+    }
+
+    if (payload.request) {
+      let access: RepoAccess;
+      try {
+        access = await repoAccess(env, userAgent);
+      } catch (error) {
+        console.error("cms: credential resolution failed:", (error as Error).message);
+        return json({ ok: false, error: "The editor can't reach the repository." }, 502);
+      }
+      try {
+        const filed = await fileRequest(
+          access,
+          {
+            text: payload.request.text ?? "",
+            ...(payload.request.page ? { page: payload.request.page } : {}),
+            who: { name: session.name, email: session.email }
+          },
+          options.requestLabel
+        );
+        return withGate(json({ ok: true, request: filed }), gate);
+      } catch (error) {
+        if (error instanceof RequestError) {
+          return json({ ok: false, error: error.message }, 400);
+        }
+        console.error("cms request failed:", (error as Error).message);
+        return json({ ok: false, error: "Couldn't send that just now. Your words are still here." }, 502);
+      }
     }
 
     const config = payload.collection ? options.collections[payload.collection] : undefined;
