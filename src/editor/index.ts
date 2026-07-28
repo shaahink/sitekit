@@ -26,7 +26,7 @@ import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
 import { cssEscape, el, labelled, link } from "./dom.js";
 import { loadGis } from "./gis.js";
-import { render, type RenderContext } from "./render.js";
+import { render, Uploads, type RenderContext } from "./render.js";
 import { editHref, RETURN_PARAM, safeReturnPath } from "./return-to.js";
 import { defaultStrings, fill, type EditorStrings } from "./strings.js";
 import { plural } from "./values.js";
@@ -84,6 +84,7 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
   element.classList.add("sk-editor");
 
   const dirty = new Dirty();
+  const uploads = new Uploads();
 
   /* Where the owner was when they were sent here to sign in. Validated in
      return-to.ts: a site-relative path or nothing, because this ends up in
@@ -295,6 +296,7 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     const body = (await response.json()) as EntryBody;
     dirty.reset();
+    uploads.clear();
 
     const save = el("button", "sk-editor__save", strings.save);
     save.type = "button";
@@ -304,13 +306,30 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     const context: RenderContext = {
       strings,
       dirty,
+      uploads,
       changed: () => {
-        save.disabled = dirty.size === 0;
+        /* A new photograph with nothing written about it holds Save. The
+           schema defaults `alt` to "" and will accept the commit happily, so
+           this is the only place it is ever asked — and asking after the fact
+           is asking never. */
+        const undescribed = uploads.missingAlt(body.values);
+        save.disabled = dirty.size === 0 || undescribed.length > 0;
         save.textContent = dirty.size
           ? fill(strings.saveCount, {
               count: plural(dirty.size, strings.change, strings.changes)
             })
           : strings.save;
+        if (undescribed.length) {
+          note.textContent = strings.imageNeedsAlt;
+          for (const path of undescribed) {
+            form.querySelector<HTMLElement>(`[data-path="${cssEscape(path)}"]`)?.classList.add("is-wanted");
+          }
+        } else {
+          for (const marked of form.querySelectorAll(".is-wanted")) marked.classList.remove("is-wanted");
+          if (note.textContent === strings.imageNeedsAlt) {
+            note.textContent = fill(strings.editingFile, { path: body.path });
+          }
+        }
       }
     };
 
@@ -362,7 +381,12 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
         collection: args.collection,
         entry: args.entry,
         sha: args.sha,
-        edits: dirty.edits()
+        edits: dirty.edits(),
+        /* Beside the edits, never inside them: an edit says `upload:u1` and
+           the server decides where the file lands. Omitted entirely when there
+           are none, so a text-only save is the same request it has always
+           been and still goes down the Contents API path. */
+        ...(uploads.size ? { uploads: uploads.list() } : {})
       })
     });
 
@@ -375,6 +399,10 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     if (response.ok) {
       dirty.settle();
+      /* The photographs are in the repository now, so a second save must not
+         send them again — the same bytes would be hashed to the same filename
+         and committed a second time for nothing. */
+      uploads.clear();
       for (const changed of form.querySelectorAll(".is-changed")) changed.classList.remove("is-changed");
       save.textContent = strings.saved;
       note.textContent = "";

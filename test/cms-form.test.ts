@@ -112,7 +112,39 @@ describe("formModel", () => {
 
   it("walks a schema built with .extend()", () => {
     expect(byPath.get("pieces[].caption")?.kind).toBe("text");
-    expect(byPath.get("pieces[].src")?.kind).toBe("text");
+  });
+
+  /* A `src` string beside `w` and `h` integers is a photograph, not a string
+     that happens to hold a path — recognised from the shape rather than
+     declared per site, so the sixth site gets the picker without opting into
+     anything. `w`/`h` come with it because they are almost always omitted from
+     the form and still required by the schema: the picker writes them. */
+  it("reads a picture out of its shape", () => {
+    expect(byPath.get("pieces[].src")).toMatchObject({
+      kind: "image",
+      widthPath: "pieces[].w",
+      heightPath: "pieces[].h",
+      altPath: "pieces[].alt"
+    });
+    expect(byPath.get("hero.slides[].src")?.kind).toBe("image");
+  });
+
+  it("leaves a lone string alone", () => {
+    const model = formModel(z.object({ src: z.string(), title: z.string() }));
+    expect(model.find((field) => field.path === "src")?.kind).toBe("text");
+  });
+
+  /* The escape hatch for a schema that spells a picture some other way. */
+  it("takes an explicit format instead of the convention", () => {
+    const model = formModel(
+      z.object({ cover: z.object({ file: z.string().meta({ format: "image" }), alt: z.string() }) })
+    );
+    const cover = model.find((field) => field.path === "cover");
+    if (cover?.kind !== "group") throw new Error("expected a group");
+    expect(cover.fields.find((field) => field.path === "cover.file")).toMatchObject({
+      kind: "image",
+      altPath: "cover.alt"
+    });
   });
 
   it("keeps int/positive bounds but drops the MAX_SAFE_INTEGER artifact", () => {

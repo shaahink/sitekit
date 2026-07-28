@@ -13,13 +13,14 @@
    the YAML may contain, which is the question being asked here. */
 
 import { z } from "zod";
-import type { Field, FieldCommon } from "./fields.js";
+import type { BooleanField, Field, FieldCommon, ImageField } from "./fields.js";
+import { VISIBLE } from "./visibility.js";
 
 const MAX_SAFE = 9007199254740991;
 
 /* The descriptors themselves live in fields.ts — the browser half of the
    editor needs them too, and it compiles under a different lib. */
-export type { Field, FieldCommon, SelectOption } from "./fields.js";
+export type { BooleanField, Field, FieldCommon, ImageField, SelectOption } from "./fields.js";
 
 export interface FormModelOptions {
   /** Template paths to leave out — `images[].w` and friends. The layouts
@@ -65,13 +66,68 @@ interface Node {
 function groupFields(node: Node, prefix: string, root: Node, omit: Set<string>): Field[] {
   const required = new Set(node.required ?? []);
   const fields: Field[] = [];
+  const picture = pictureAt(node, prefix, root);
   for (const [key, child] of Object.entries(node.properties ?? {})) {
     const path = prefix ? `${prefix}.${key}` : key;
     if (omit.has(path)) continue;
     const field = walk(deref(child, root), path, humanize(key), required.has(key), root, omit);
-    if (field) fields.push(field);
+    if (!field) continue;
+    /* The one field in this object that is a photograph rather than a string
+       that happens to hold a path. See pictureAt for why this is recognised
+       rather than declared. */
+    fields.push(picture && picture.path === path ? { ...picture, ...pick(field) } : field);
   }
   return fields;
+}
+
+/** Keep the label and the help the walk worked out; the rest of an image field
+    is decided by its siblings. */
+function pick(field: Field): { label: string; required: boolean; help?: string } {
+  return { label: field.label, required: field.required, ...(field.help ? { help: field.help } : {}) };
+}
+
+/* Is this object a picture, and if so which of its fields is the file?
+   ---------------------------------------------------------------------------
+   Recognised from the shape rather than declared per site, and that choice is
+   the difference between an image control the fleet gets and one twenty sites
+   each have to opt into. Every picture in the fleet is spelled the same way —
+   a `src` string beside `w` and `h` integers — because they all descend from
+   the same conversion, and the template teaches the next one the same shape.
+
+   `w`/`h` are looked for in the *schema*, not in the form model, because they
+   are almost always omitted from the form: they are structure wearing a
+   number's clothing, an owner has no business typing them, and they are still
+   required by the schema. So the picker writes them, and it can only do that
+   if it knows they exist while they are still visible here.
+
+   A schema that spells it another way says so explicitly with
+   `z.string().meta({ format: "image" })`, and gets the same control with
+   whatever siblings it does have. That is the escape hatch, not the rule:
+   making it the rule would have been five schemas of ceremony for something
+   the shape already says. */
+function pictureAt(node: Node, prefix: string, root: Node): ImageField | null {
+  const properties = node.properties ?? {};
+  const at = (key: string): string => (prefix ? `${prefix}.${key}` : key);
+  const has = (key: string, type: string): boolean => {
+    const child = properties[key];
+    return Boolean(child) && typeName(deref(child as Node, root)) === type;
+  };
+
+  const declared = Object.keys(properties).find(
+    (key) => deref(properties[key] as Node, root).format === "image"
+  );
+  const source = declared ?? (has("src", "string") && has("w", "integer") && has("h", "integer") ? "src" : null);
+  if (!source) return null;
+
+  return {
+    path: at(source),
+    label: humanize(source),
+    required: (node.required ?? []).includes(source),
+    kind: "image",
+    ...(has("w", "integer") ? { widthPath: at("w") } : {}),
+    ...(has("h", "integer") ? { heightPath: at("h") } : {}),
+    ...(has("alt", "string") ? { altPath: at("alt") } : {})
+  };
 }
 
 function walk(
@@ -144,14 +200,34 @@ function walk(
 
   switch (typeName(node)) {
     case "object": {
-      const fields = groupFields(node, path, root, omit);
+      const all = groupFields(node, path, root, omit);
+
+      /* `visible` is the section's switch, not one of its words. Lifting it
+         here — rather than leaving the panel to spot a checkbox by name — is
+         what keeps the rule in one place: the model says which group can be
+         turned off, and both the panel and anything else reading the model
+         inherit that without agreeing on a convention separately.
+
+         Only a real boolean qualifies. A site that happens to have a *string*
+         called `visible` gets an ordinary field, because guessing wrong here
+         would put an on/off switch in front of an owner that does not turn
+         anything off. */
+      const toggle = all.find(
+        (field): field is BooleanField => field.kind === "boolean" && field.path === `${path}.${VISIBLE}`
+      );
+      const fields = toggle ? all.filter((field) => field !== toggle) : all;
+
       /* A group whose every child was omitted has nothing to show, and drawing
          it anyway gives the panel an empty box with a label still on it — which
          reads as a field that failed to load rather than as one deliberately
          withheld. shade's `images[].lg` was exactly this: two omitted pixel
-         sizes and a box labelled "Lg". */
-      if (fields.length === 0) return null;
-      return { ...common, kind: "group", fields };
+         sizes and a box labelled "Lg".
+
+         A group left with only its switch is the exception and is kept: a
+         section whose every word is generated still has an owner who may want
+         it off the page. */
+      if (fields.length === 0 && !toggle) return null;
+      return { ...common, kind: "group", fields, ...(toggle ? { toggle } : {}) };
     }
 
     case "array": {

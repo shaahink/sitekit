@@ -28,6 +28,36 @@ export interface EditorStrings {
   emptyList: string;
   optional: string;
 
+  /* --- rows in a list ---------------------------------------------------- */
+
+  /** `{label}` — the row's own singular name, so it reads "Add a slide". */
+  rowAdd: string;
+  rowUp: string;
+  rowDown: string;
+  rowRemove: string;
+  /** The same button after one tap. Removing a row is the one thing here that
+      cannot be undone by typing the old value back. */
+  rowRemoveConfirm: string;
+
+  /* --- photographs -------------------------------------------------------- */
+
+  imageChoose: string;
+  imageReplace: string;
+  /** Shown while a phone photograph is being scaled, which is seconds rather
+      than instant. Silence here is what makes an owner tap twice. */
+  imageWorking: string;
+  /** `{width}` `{height}` `{size}` — what is about to be committed, in kB. */
+  imageReady: string;
+  imageTooBig: string;
+  imageWrongType: string;
+  imageUnreadable: string;
+  /** The folded-away box that re-points an image at a file already on the
+      site. The panel could always do this and it stays possible. */
+  imagePointAt: string;
+  /** Holding Save until a new photograph has been described. The schema
+      defaults `alt` to "", so nothing else will ever ask. */
+  imageNeedsAlt: string;
+
   save: string;
   /** `{count}` — "Save 2 changes". */
   saveCount: string;
@@ -54,6 +84,17 @@ export interface EditorStrings {
   /** Offered on the panel when the owner arrived from a page. */
   backToPage: string;
 
+  /* --- sections that can be turned off ----------------------------------- */
+
+  /** Beside a section's switch. Says what turning it off *does*, which
+      "Visible" does not. */
+  sectionShow: string;
+  /** Under a switch that is off. Has to carry both halves: it is not on the
+      public site, and nothing has been deleted — plus the one thing an owner
+      cannot work out alone, which is that a section that is off is not on the
+      page, so the page is not where it gets turned back on. */
+  sectionHidden: string;
+
   /* --- inline editing, on the site's own pages --------------------------- */
 
   /** The bar's resting line: what to do, before anything has been touched. */
@@ -76,6 +117,9 @@ export interface EditorStrings {
   inlineHelpCancel: string;
   inlineHelpSave: string;
   inlineHelpPanel: string;
+  /** Only added to the help when the page has a section that can be turned
+      off, because it is only true of such a page. */
+  inlineHelpHidden: string;
   /** `{label}` — a field whose *value* carries markup, or whose element wraps
       other elements the design depends on. "Formatting" is the honest word for
       both from where the owner is standing. */
@@ -121,6 +165,22 @@ export const defaultStrings: EditorStrings = {
   emptyList: "Nothing here yet.",
   optional: "optional",
 
+  rowAdd: "Add {label}",
+  rowUp: "Move up",
+  rowDown: "Move down",
+  rowRemove: "Remove",
+  rowRemoveConfirm: "Tap again to remove",
+
+  imageChoose: "Choose a photograph",
+  imageReplace: "Replace this photograph",
+  imageWorking: "Getting the photograph ready…",
+  imageReady: "Ready — {width}×{height}, {size} kB. It goes on the site when you save.",
+  imageTooBig: "That photograph is too large even after shrinking. Try a smaller one.",
+  imageWrongType: "This browser didn't produce a JPEG. Try a different photograph, or the full editor on a computer.",
+  imageUnreadable: "That file couldn't be read as a photograph.",
+  imagePointAt: "Or use a picture already on the site",
+  imageNeedsAlt: "Please describe the new photograph first — it's what people using a screen reader will hear.",
+
   save: "Save",
   saveCount: "Save {count}",
   change: "change",
@@ -142,6 +202,11 @@ export const defaultStrings: EditorStrings = {
   openPage: "Edit this page on the site",
   backToPage: "Back to the page",
 
+  sectionShow: "Show this section on the site",
+  sectionHidden:
+    "This section isn't on the site at the moment. Nothing has been deleted — everything you've written is still here, " +
+    "and this switch is where it comes back. It won't be on the page itself while it's off.",
+
   /* Written to be read by someone who has never seen a CMS. Nothing here says
      "field", "commit", "deploy" or "collection"; an owner is changing the
      words on their own page and everything else is our problem. */
@@ -160,6 +225,8 @@ export const defaultStrings: EditorStrings = {
   inlineHelpCancel: "Press Escape, or “Undo this one”, to put a piece of text back as it was.",
   inlineHelpSave: "Save sends everything you changed at once. The page updates a minute or so later.",
   inlineHelpPanel: "Greyed-out text has to be changed in the full editor.",
+  inlineHelpHidden:
+    "Whole sections can be turned off in the full editor. One that's off isn't on this page at all, so that's also where it comes back.",
   inlinePanelOnly: "“{label}” has formatting in it, so it's edited in the full editor.",
   inlinePanelElsewhere: "“{label}” is edited in the full editor, not here on the page.",
   inlinePanelLink: "Open the full editor",

@@ -5,7 +5,7 @@
    way the widget's is. Keeping the arithmetic out of it is what makes that a
    reasonable division rather than an excuse. */
 
-import type { Field } from "../cms/fields.js";
+import type { BooleanField, Field } from "../cms/fields.js";
 
 /** `hero.slides[0].alt` → the value at that path in the parsed document, or
     `undefined` if any step of the way isn't there. A malformed segment reads
@@ -31,18 +31,90 @@ function step(value: unknown, key: string | number): unknown {
   return (value as Record<string | number, unknown>)[key];
 }
 
+/** The reverse: put a value where `valueAt` would read it from.
+
+    The panel keeps the document it loaded and writes every control's value
+    back into it as it is typed. That copy is what a repeater sends when rows
+    move — an array cannot be described by a change to one path, so it goes
+    whole, and it has to go whole *including* whatever was typed into it since
+    it loaded.
+
+    Missing steps are created, because adding the first row of an empty list
+    means writing an array that was not in the file. Nothing is created past a
+    step that exists and is the wrong shape: a path that disagrees with the
+    document is a fault in the caller, and overwriting a string with an object
+    to satisfy it would turn that into lost content. */
+export function writeAt(values: unknown, path: string, value: unknown): boolean {
+  const steps = pathSteps(path);
+  const last = steps.pop();
+  if (last === undefined) return false;
+
+  let current: unknown = values;
+  for (const [depth, key] of steps.entries()) {
+    if (current === null || typeof current !== "object") return false;
+    const holder = current as Record<string | number, unknown>;
+    if (holder[key] === null || holder[key] === undefined) {
+      /* What to create is decided by the *next* step, not this one: a numeric
+         step means the thing being created is a list, and a named one means it
+         is an object. Reading this off the current key instead is the classic
+         way to end up with `slides` as an object with a key called "0". */
+      holder[key] = typeof (steps[depth + 1] ?? last) === "number" ? [] : {};
+    }
+    current = holder[key];
+  }
+  if (current === null || typeof current !== "object") return false;
+  (current as Record<string | number, unknown>)[last] = value;
+  return true;
+}
+
+function pathSteps(path: string): Array<string | number> {
+  const out: Array<string | number> = [];
+  for (const segment of path.split(".")) {
+    const match = /^([^[\]]*)((?:\[\d+\])*)$/.exec(segment);
+    if (!match) return [];
+    const name = match[1] ?? "";
+    if (name) out.push(name);
+    for (const [, index] of (match[2] ?? "").matchAll(/\[(\d+)\]/g)) out.push(Number(index));
+  }
+  return out;
+}
+
 /** Deep-copy a field subtree with its path prefix pointed somewhere real.
 
     The model describes one array row as a template — `slides[].alt`. Point it
     at a concrete index and the rest of the walk is the same as anywhere else,
     which is why repeaters need no special case beyond this. */
 export function retarget(field: Field, from: string, to: string): Field {
-  const path = field.path.startsWith(from) ? to + field.path.slice(from.length) : field.path;
+  const point = (path: string): string => (path.startsWith(from) ? to + path.slice(from.length) : path);
+  const path = point(field.path);
+
   if (field.kind === "group") {
-    return { ...field, path, fields: field.fields.map((child) => retarget(child, from, to)) };
+    return {
+      ...field,
+      path,
+      fields: field.fields.map((child) => retarget(child, from, to)),
+      /* The section's switch is not in `fields` — it was lifted out so the
+         panel could draw it at the head of the box — so it has to be pointed
+         at this row by hand. Missed, a list of hideable rows would give every
+         one of them the same switch, writing `rooms[].visible`. */
+      ...(field.toggle ? { toggle: retarget(field.toggle, from, to) as BooleanField } : {})
+    };
   }
   if (field.kind === "array") {
     return { ...field, path, item: retarget(field.item, from, to) };
+  }
+  /* Same again, and worse if missed: a picture's `w`, `h` and `alt` are
+     sibling *paths* rather than fields, because they are usually omitted from
+     the form and the picker still has to write them. Left as templates they
+     would send `pieces[].w` as an edit — a path no document has. */
+  if (field.kind === "image") {
+    return {
+      ...field,
+      path,
+      ...(field.widthPath ? { widthPath: point(field.widthPath) } : {}),
+      ...(field.heightPath ? { heightPath: point(field.heightPath) } : {}),
+      ...(field.altPath ? { altPath: point(field.altPath) } : {})
+    };
   }
   return { ...field, path };
 }

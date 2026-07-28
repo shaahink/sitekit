@@ -244,6 +244,190 @@ body {
   color: var(--sk-editor-muted);
 }
 
+/* Row controls — buttons, never drag.
+   ---------------------------------------------------------------------------
+   Drag is poor on touch and worse with a screen reader, and this is a feature
+   whose point is that it works from a phone. Everything here is sized for a
+   thumb: 44px, which is the smallest target that is reliably hit without
+   looking. */
+.sk-editor__rowtools {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: flex-end;
+  margin-block-end: 0.5rem;
+}
+
+.sk-editor__rowbutton {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding-inline: 0.7rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: var(--sk-editor-dim);
+  background: var(--sk-editor-raise);
+  border: 1px solid var(--sk-editor-line);
+  border-radius: var(--sk-editor-radius);
+  cursor: pointer;
+}
+.sk-editor__rowbutton:hover:not(:disabled) { color: var(--sk-editor-ink); }
+.sk-editor__rowbutton:disabled { opacity: 0.3; cursor: default; }
+.sk-editor__rowbutton:focus-visible {
+  outline: 2px solid var(--sk-editor-accent);
+  outline-offset: 2px;
+}
+
+/* Armed, after the first tap. It says what the second tap does rather than
+   turning red and hoping that is understood. */
+.sk-editor__rowbutton--remove.is-armed {
+  color: var(--sk-editor-bg);
+  background: var(--sk-editor-ink);
+  border-color: var(--sk-editor-ink);
+}
+
+.sk-editor__rowadd {
+  inline-size: 100%;
+  min-block-size: 44px;
+  margin-block-start: 0.75rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--sk-editor-ink);
+  background: transparent;
+  border: 1px dashed var(--sk-editor-line);
+  border-radius: var(--sk-editor-radius);
+  cursor: pointer;
+}
+.sk-editor__rowadd:hover { border-color: var(--sk-editor-accent); }
+.sk-editor__rowadd:focus-visible {
+  outline: 2px solid var(--sk-editor-accent);
+  outline-offset: 2px;
+}
+
+/* A list whose rows have moved is marked whole, because that is how it saves:
+   the array goes as one edit, so one mark is the truth. */
+.sk-editor__group--list.is-changed > .sk-editor__legend { color: var(--sk-editor-accent-lit); }
+.sk-editor__group--list.is-changed { border-color: var(--sk-editor-accent); }
+
+/* Photographs */
+.sk-editor__preview {
+  display: block;
+  inline-size: 100%;
+  max-block-size: 18rem;
+  object-fit: contain;
+  object-position: center;
+  background: var(--sk-editor-raise);
+  border: 1px solid var(--sk-editor-line-soft);
+  border-radius: var(--sk-editor-radius);
+}
+/* No picture yet: a box of the right shape rather than a broken-image glyph,
+   which reads as a fault the owner caused. */
+.sk-editor__image.is-empty .sk-editor__preview {
+  block-size: 8rem;
+  object-fit: none;
+}
+
+.sk-editor__filename {
+  margin-block: 0.4rem 0;
+  font-size: 0.8rem;
+  word-break: break-all;
+  color: var(--sk-editor-muted);
+}
+.sk-editor__filename:empty { display: none; }
+
+/* The real input is behind its own label, which is a genuine control for a
+   keyboard and a screen reader — not a div pretending to be a button. */
+.sk-editor__file {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.sk-editor__choose {
+  display: inline-block;
+  min-block-size: 44px;
+  margin-block-start: 0.6rem;
+  padding: 0.7rem 1.2rem;
+  font-size: 0.95rem;
+  color: var(--sk-editor-ink);
+  background: var(--sk-editor-raise);
+  border: 1px solid var(--sk-editor-line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.sk-editor__choose:hover { border-color: var(--sk-editor-accent); }
+.sk-editor__file:focus-visible + .sk-editor__choose {
+  outline: 2px solid var(--sk-editor-accent);
+  outline-offset: 2px;
+}
+.sk-editor__choose.is-busy { opacity: 0.5; cursor: progress; }
+
+.sk-editor__imagestatus {
+  margin-block: 0.5rem 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--sk-editor-dim);
+}
+.sk-editor__imagestatus:empty { display: none; }
+.sk-editor__imagestatus.is-bad { color: var(--sk-editor-accent-lit); }
+
+/* The description a new photograph still owes. Marked rather than merely
+   mentioned, because the field is often several rows further down. */
+.sk-editor__input.is-wanted {
+  border-color: var(--sk-editor-accent);
+  background: color-mix(in srgb, var(--sk-editor-accent) 12%, var(--sk-editor-raise));
+}
+
+/* A section's on/off switch, at the head of its box.
+   ---------------------------------------------------------------------------
+   Set apart from the fields below it by a rule and its own background, because
+   it is the one control here that changes what the public sees rather than
+   what it says. An owner scanning for a sentence to fix should not find this
+   under their thumb by accident. */
+.sk-editor__section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-block: 0 var(--sk-editor-gap);
+  padding: 0.7rem 0.8rem;
+  background: var(--sk-editor-raise);
+  border: 1px solid var(--sk-editor-line-soft);
+  border-radius: var(--sk-editor-radius);
+}
+.sk-editor__section .sk-editor__label {
+  margin-block-end: 0;
+  order: 2;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.95rem;
+  color: var(--sk-editor-ink);
+}
+.sk-editor__section .sk-editor__check { order: 1; }
+
+.sk-editor__sectionnote {
+  order: 3;
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--sk-editor-dim);
+}
+.sk-editor__sectionnote[hidden] { display: none; }
+
+/* The whole box dims when the section is off. The fields stay editable and
+   still save — an owner writing a section before turning it on is the normal
+   way round — so this says "not public yet", not "not editable". */
+.sk-editor__group.is-off > *:not(.sk-editor__section):not(.sk-editor__legend) {
+  opacity: 0.55;
+}
+.sk-editor__group.is-off > .sk-editor__legend {
+  color: var(--sk-editor-muted);
+}
+
 /* The save bar stays reachable with a thumb. */
 .sk-editor__footer {
   position: sticky;

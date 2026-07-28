@@ -19,6 +19,8 @@ import { installationToken } from "../feedback/app-auth.js";
 import { sameHost } from "../feedback/guards.js";
 import { json } from "../feedback/http.js";
 import { ConflictError, listEntries, readFile, writeFile, type RepoAccess } from "./contents.js";
+import { commitFiles } from "./tree.js";
+import { prepareUploads, resolveUploads, UploadError, type PreparedUpload } from "./uploads.js";
 import { formModel } from "./form.js";
 import { applyEdits, readValues, type Edit } from "./yaml.js";
 import { readSession, renewSession, type Session } from "./session.js";
@@ -33,6 +35,11 @@ export interface ContentHandler {
 /* An entry name becomes a file path, so it is checked rather than trusted:
    anything but a plain name could climb out of the collection's directory. */
 const ENTRY = /^[a-z0-9][a-z0-9._-]*$/i;
+
+/** Where photographs land when a collection hasn't said. Under `public/`,
+    because that is where Astro serves static files from and the URL written
+    into the content is this path with its first segment removed. */
+const DEFAULT_IMAGE_DIR = "public/images/uploads";
 
 export function createContentHandler(options: ContentHandlerOptions): ContentHandler {
   const resolveEnv: () => CmsEnv =
@@ -112,6 +119,10 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
       entry?: string;
       edits?: Edit[];
       sha?: string;
+      /** Photographs the panel encoded, referred to from `edits` as
+          `upload:<id>`. The client never names a repository path — see
+          uploads.ts for why that is the whole shape of this. */
+      uploads?: unknown;
     };
     try {
       payload = (await request.json()) as typeof payload;
@@ -160,9 +171,45 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
       );
     }
 
+    /* Photographs, if any: validated and given their repository paths here,
+       then substituted into the edits that referred to them. Nothing is
+       written yet — a save that fails validation must not leave orphan blobs
+       behind, so every file goes in the same commit as the content or not at
+       all. */
+    let uploads: PreparedUpload[];
+    try {
+      uploads = await prepareUploads(
+        payload.uploads,
+        config.imageDir ?? DEFAULT_IMAGE_DIR,
+        options.uploadLimits ?? {}
+      );
+    } catch (error) {
+      if (error instanceof UploadError) return json({ ok: false, error: error.message }, 400);
+      throw error;
+    }
+
+    let resolved: Edit[];
+    try {
+      resolved = edits.map((edit) => ({ path: edit.path, value: resolveUploads(edit.value, uploads) }));
+    } catch (error) {
+      if (error instanceof UploadError) return json({ ok: false, error: error.message }, 400);
+      throw error;
+    }
+
+    /* An upload nothing refers to would be committed and then be an orphan
+       from its first second — no row pointing at it, nothing to find it by.
+       Decision 3 accepts orphans left behind by a *deletion*, where the file
+       was referenced once and the history remembers it; this is a different
+       thing, and it is a fault in the caller rather than something an owner
+       did. */
+    const referring = JSON.stringify(resolved);
+    if (uploads.some((upload) => !referring.includes(JSON.stringify(upload.url)))) {
+      return json({ ok: false, error: "Malformed request." }, 400);
+    }
+
     let updated: string;
     try {
-      updated = applyEdits(current.text, edits);
+      updated = applyEdits(current.text, resolved);
     } catch (error) {
       console.error("cms: applying edits failed:", (error as Error).message);
       return json({ ok: false, error: "Couldn't apply that change." }, 400);
@@ -185,11 +232,21 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
     }
 
     try {
-      const written = await writeFile(
-        path,
-        { text: updated, sha: payload.sha, message: commitMessage(path, edits, session) },
-        access
-      );
+      const message = commitMessage(path, edits, session, uploads.length);
+      /* A save that carries files goes through the Git Data API so the image
+         and the row that points at it land together — see tree.ts. Text-only
+         saves stay on the Contents API: it is the common case, it already
+         works, and its `sha` parameter is the concurrency check for free. */
+      const written = uploads.length
+        ? await commitFiles(
+            [
+              { path, text: updated },
+              ...uploads.map((upload) => ({ path: upload.path, base64: upload.base64 }))
+            ],
+            { message, expect: { path, sha: payload.sha } },
+            access
+          )
+        : await writeFile(path, { text: updated, sha: payload.sha, message }, access);
       return withGate(json({ ok: true, sha: written.sha, commit: written.commit }), gate);
     } catch (error) {
       if (error instanceof ConflictError) {
@@ -307,10 +364,13 @@ function entryUrl(config: CollectionConfig, id: string): string | undefined {
 
 /** Readable in `git log` without opening the diff, and it names the human even
     though the commit is authored by the App. */
-function commitMessage(path: string, edits: Edit[], session: Session): string {
+function commitMessage(path: string, edits: Edit[], session: Session, files = 0): string {
   const file = path.replace(/^.*\//, "");
   const paths = edits.map((edit) => edit.path);
   const shown = paths.slice(0, 3).join(", ");
   const rest = paths.length > 3 ? `, and ${paths.length - 3} more` : "";
-  return `Edit ${file}: ${shown}${rest}\n\nChanged by ${session.name} <${session.email}> through the site editor.`;
+  /* Said in the subject rather than left to the diff: a commit that adds a
+     megabyte of photographs should look like one in `git log`. */
+  const pictures = files ? ` (+${files} ${files === 1 ? "picture" : "pictures"})` : "";
+  return `Edit ${file}: ${shown}${rest}${pictures}\n\nChanged by ${session.name} <${session.email}> through the site editor.`;
 }

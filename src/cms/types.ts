@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { UploadLimits } from "./uploads.js";
 
 /* The editor deliberately reuses the sk-feedback App (session 7, Decision 3).
    It already holds Contents: read/write on every repo in the fleet, and its
@@ -55,6 +56,16 @@ export interface CollectionConfig {
       (`{ "home.fr": "/fr/" }`). Site-relative paths only; anything else is
       dropped. */
   entryUrl?: string | Record<string, string>;
+  /** Where photographs added through the editor are committed, relative to the
+      repository root. Defaults to `public/images/uploads`.
+
+      It must sit under the site's public directory: the URL written into the
+      content is this path with its **first segment removed**, which is Astro's
+      rule for `public/`. A site that keeps images somewhere else — behind
+      `astro:assets`, or as pre-built responsive variants — should leave image
+      fields omitted rather than point this at them, because the editor writes
+      one JPEG and one `src`, and neither of those shapes is that. */
+  imageDir?: string;
 }
 
 export interface ContentHandlerOptions {
@@ -63,4 +74,8 @@ export interface ContentHandlerOptions {
   userAgent?: string;
   /** How long a sign-in lasts, in seconds. An hour by default. */
   sessionMaxAge?: number;
+  /** Ceilings on what one save may carry in photographs. The defaults are in
+      uploads.ts and are sized for a phone on a train rather than for GitHub's
+      limits, which are far higher. */
+  uploadLimits?: UploadLimits;
 }

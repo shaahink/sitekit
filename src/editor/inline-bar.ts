@@ -44,6 +44,7 @@ export class Bar {
   private readonly status: HTMLParagraphElement;
   private readonly note: HTMLParagraphElement;
   private readonly help: HTMLElement;
+  private readonly helpLines: { wrap: HTMLElement; list: HTMLElement };
   private readonly saveButton: HTMLButtonElement;
   private readonly revertButton: HTMLButtonElement;
   private readonly discardButton: HTMLButtonElement;
@@ -115,7 +116,8 @@ export class Bar {
     this.help = document.createElement("div");
     this.help.className = "bar__help";
     this.help.hidden = true;
-    this.help.append(helpList(strings));
+    this.helpLines = helpList(strings);
+    this.help.append(this.helpLines.wrap);
 
     const main = document.createElement("div");
     main.className = "bar__main";
@@ -147,6 +149,19 @@ export class Bar {
   setSave(label: string, enabled: boolean): void {
     this.saveButton.textContent = label;
     this.saveButton.disabled = !enabled;
+  }
+
+  /** One more line of help, added once the page's own content model is known.
+
+      Sections that can be turned off are the case this exists for. The
+      sentence is only true of a page that has one, and a page that hasn't
+      would be told about a control it does not have — so the bar is built
+      before the fetch and learns this afterwards, rather than the strings
+      guessing at construction. */
+  addHelp(line: string): void {
+    const item = document.createElement("li");
+    item.textContent = line;
+    this.helpLines.list.append(item);
   }
 
   setRevertVisible(visible: boolean): void {
@@ -240,7 +255,7 @@ function button(className: string, label: string, run: () => void): HTMLButtonEl
   return node;
 }
 
-function helpList(strings: BarStrings): HTMLElement {
+function helpList(strings: BarStrings): { wrap: HTMLElement; list: HTMLElement } {
   const wrap = document.createElement("div");
   const title = document.createElement("strong");
   title.textContent = strings.helpTitle;
@@ -251,5 +266,5 @@ function helpList(strings: BarStrings): HTMLElement {
     list.append(item);
   }
   wrap.append(title, list);
-  return wrap;
+  return { wrap, list };
 }

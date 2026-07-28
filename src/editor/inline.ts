@@ -185,6 +185,12 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
   const body = (await loaded.json()) as { sha: string; fields: Field[]; values: unknown };
   sha = body.sha;
 
+  /* A section that is off is not rendered, so the page is not where it gets
+     turned back on — and an owner who has just turned one off is standing on
+     the one screen that cannot undo it. Said only where it is true: a page
+     with nothing hideable would be told about a control it has not got. */
+  if (hasToggle(body.fields)) bar.addHelp(strings.inlineHelpHidden);
+
   /* --- wiring the page -------------------------------------------------- */
 
   const plaintext = supportsPlaintextOnly();
@@ -719,6 +725,15 @@ function supportsPlaintextOnly(): boolean {
 
 function squash(text: string): string {
   return text.replace(/\s+/g, " ").trim();
+}
+
+/** Does this page's content model have a section that can be turned off? */
+function hasToggle(fields: Field[]): boolean {
+  return fields.some(
+    (field) =>
+      (field.kind === "group" && (Boolean(field.toggle) || hasToggle(field.fields))) ||
+      (field.kind === "array" && hasToggle([field.item]))
+  );
 }
 
 /** Annotations rot against redesigns, and a rotted one that does nothing is

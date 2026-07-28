@@ -42,11 +42,40 @@ export type Field =
       max?: number;
       default?: number;
     })
-  | (FieldCommon & { kind: "boolean"; default?: boolean })
+  | BooleanField
+  | (FieldCommon & {
+      kind: "image";
+      /** The sibling paths a new photograph fills in with its encoded size.
+          They are usually `omit`ted from the form — an owner has no business
+          typing pixel counts — which is exactly why the picker has to know
+          them: they are required by the schema and derived, not edited. */
+      widthPath?: string;
+      heightPath?: string;
+      /** The sibling the picker insists on. The schema defaults `alt` to `""`,
+          so an editor that did not ask would happily commit an inaccessible
+          photograph. */
+      altPath?: string;
+    })
   | (FieldCommon & { kind: "select"; options: SelectOption[]; default?: string | number | boolean })
-  | (FieldCommon & { kind: "group"; fields: Field[] })
+  | (FieldCommon & {
+      kind: "group";
+      fields: Field[];
+      /** The section's own on/off switch — `visible` — lifted out of `fields`
+          so the panel can draw it at the head of the box instead of leaving a
+          checkbox called "Visible" among the words. Whether a section the
+          designer built appears at all is content (PLAN §3.9); it is just not
+          content of the same *kind* as the sentences inside it, and burying it
+          among them is how an owner turns their Partners section off by
+          accident. */
+      toggle?: BooleanField;
+    })
   | (FieldCommon & { kind: "array"; item: Field });
 
+/** Broken out because a group refers to it. */
+export type BooleanField = FieldCommon & { kind: "boolean"; default?: boolean };
+
 /** A field that becomes one control. Groups and arrays become structure. */
-export type ScalarField = Extract<Field, { kind: "text" | "number" | "boolean" | "select" }>;
+export type ScalarField = Extract<Field, { kind: "text" | "number" | "boolean" | "select" | "image" }>;
+
+export type ImageField = Extract<Field, { kind: "image" }>;
 

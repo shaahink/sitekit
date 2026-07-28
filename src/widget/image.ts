@@ -17,8 +17,19 @@ export interface ShrinkOptions {
   maxLength?: number;
 }
 
-/** Downscale + recompress to a JPEG data URL. Rejects with Error("too big")
-    when even minimum quality won't fit — the caller owns the wording. */
+/** Downscale + recompress to a JPEG data URL.
+
+    **The type is checked rather than requested.** `canvas.toDataURL` is
+    specified to fall back to `image/png` when it cannot encode what it was
+    asked for, silently — so asking for WebP on an iPhone yields a PNG, and a
+    200 KB upload becomes a 4 MB one on the device most likely to be used. This
+    only ever asks for JPEG, which makes the fallback unreachable in theory; it
+    is asserted anyway, because "in theory" is exactly what a silent fallback
+    defeats.
+
+    Rejects with Error("too big") when even minimum quality won't fit, and
+    Error("not jpeg") if the browser produced something else — the caller owns
+    the wording either way. */
 export function shrink(file: Blob, options: ShrinkOptions = {}): Promise<string> {
   const maxSide = options.maxSide || 1600;
   const startQuality = options.quality || 0.82;
@@ -42,6 +53,7 @@ export function shrink(file: Blob, options: ShrinkOptions = {}): Promise<string>
       out = canvas.toDataURL("image/jpeg", quality);
     }
     if (out.length > maxLength) throw new Error("too big");
+    if (!/^data:image\/jpeg;base64,/.test(out)) throw new Error("not jpeg");
     return out;
   });
 }
