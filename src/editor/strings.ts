@@ -66,8 +66,15 @@ export interface EditorStrings {
   inlineHelpCancel: string;
   inlineHelpSave: string;
   inlineHelpPanel: string;
-  /** `{label}` — a field the panel has to handle instead. */
+  /** `{label}` — a field whose *value* carries markup, or whose element wraps
+      other elements the design depends on. "Formatting" is the honest word for
+      both from where the owner is standing. */
   inlinePanelOnly: string;
+  /** `{label}` — a field the panel has to handle for a reason that has nothing
+      to do with formatting: it is decorative, or inside a control that does
+      something else when tapped. Saying "formatting" here would be a lie the
+      owner could act on. */
+  inlinePanelElsewhere: string;
   inlinePanelLink: string;
   /** `{path}` — an annotation the content no longer has a value for. Shown on
       the element itself, where the path is the useful thing to say. */
@@ -138,6 +145,7 @@ export const defaultStrings: EditorStrings = {
   inlineHelpSave: "Save sends everything you changed at once. The page updates a minute or so later.",
   inlineHelpPanel: "Greyed-out text has to be changed in the full editor.",
   inlinePanelOnly: "“{label}” has formatting in it, so it's edited in the full editor.",
+  inlinePanelElsewhere: "“{label}” is edited in the full editor, not here on the page.",
   inlinePanelLink: "Open the full editor",
   inlineBroken: "This points at “{path}”, which the content no longer has.",
   inlineBrokenSome:

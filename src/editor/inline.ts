@@ -57,7 +57,11 @@ interface Editable {
     layer has to avoid. */
 type Verdict =
   | { kind: "edit"; field: Field; value: string }
-  | { kind: "panel"; reason: string; label: string }
+  /* `why` picks which sentence the owner is shown. "formatting" is true of a
+     value carrying markup and of an element wrapping the design's own spans;
+     "elsewhere" covers everything that is not about formatting at all, where
+     saying so would be a lie they could act on. */
+  | { kind: "panel"; why: "formatting" | "elsewhere"; reason: string; label: string }
   | { kind: "broken"; reason: string };
 
 export async function startInlineEditor(options: InlineOptions = {}): Promise<void> {
@@ -185,7 +189,10 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
     if (verdict.kind === "panel") {
       element.dataset.skEditState = "panel";
-      element.title = fill(strings.inlinePanelOnly, { label: verdict.label });
+      element.title = fill(
+        verdict.why === "formatting" ? strings.inlinePanelOnly : strings.inlinePanelElsewhere,
+        { label: verdict.label }
+      );
       warn(path, verdict.reason);
       continue;
     }
@@ -257,7 +264,28 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     }
 
     if (field.kind !== "text" && field.kind !== "number") {
-      return { kind: "panel", reason: `is a ${field.kind} field`, label: field.label };
+      return { kind: "panel", why: "elsewhere", reason: `is a ${field.kind} field`, label: field.label };
+    }
+
+    /* Hidden from assistive technology, so it must not become focusable.
+       `contenteditable` puts an element in the tab order and names it a
+       textbox; inside `aria-hidden="true"` that is a focusable control a
+       screen-reader user can reach but never be told about, which is a worse
+       fault than the missing convenience. Bruce's Persian watermark and his
+       marquee are both in this position, and both were skipped by hand when
+       his page was annotated — a rule the kit should keep rather than each
+       person who annotates a site. */
+    if (element.closest('[aria-hidden="true"]')) {
+      return { kind: "panel", why: "elsewhere", reason: "is inside aria-hidden", label: field.label };
+    }
+
+    /* Inside a control that does something when tapped. A link is fine — the
+       navigation is suppressed while editing — but a button runs the site's
+       own JavaScript, and there is no safe way to tell a click meant for the
+       button from one meant for the caret. Bruce's video facade is the case:
+       tapping its label swaps in the YouTube iframe. */
+    if (element.closest("button")) {
+      return { kind: "panel", why: "elsewhere", reason: "is inside a button", label: field.label };
     }
 
     /* Only an element holding nothing but text can be edited in place.
@@ -268,7 +296,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
        owner would watch the drop cap vanish as they typed. Caught by reading a
        real site's markup rather than by using it. */
     if (element.children.length) {
-      return { kind: "panel", reason: "wraps other elements", label: field.label };
+      return { kind: "panel", why: "formatting", reason: "wraps other elements", label: field.label };
     }
 
     const text = String(value);
@@ -278,7 +306,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
        would exist to serve <b> and <em> in a handful of strings. The panel
        shows the raw text, where an owner can see what they are changing. */
     if (text.includes("<")) {
-      return { kind: "panel", reason: "contains markup", label: field.label };
+      return { kind: "panel", why: "formatting", reason: "contains markup", label: field.label };
     }
 
     /* The element has to be *showing* this value, or editing it edits
@@ -290,6 +318,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     if (squash(element.textContent ?? "") !== squash(text)) {
       return {
         kind: "panel",
+        why: "elsewhere",
         reason: "does not match the text the element is showing",
         label: field.label
       };
