@@ -128,6 +128,33 @@ describe("formModel", () => {
     expect(paths).not.toContain("hero.slides[].h");
   });
 
+  /* A box with a label and nothing in it reads as a field that failed to load,
+     not as one deliberately withheld — and a site that omits every leaf of a
+     size object is asking for the object to be gone, not emptied. */
+  it("drops a group whose every child was omitted", () => {
+    const sized = z.object({
+      title: z.string(),
+      image: z.object({
+        src: z.string(),
+        lg: z.object({ w: z.number(), h: z.number() })
+      })
+    });
+    const fields = formModel(sized, { omit: ["image.lg.w", "image.lg.h"] });
+    const image = fields.find((field) => field.path === "image");
+    expect(image?.kind).toBe("group");
+    if (image?.kind !== "group") throw new Error("unreachable");
+    expect(image.fields.map((field) => field.path)).toEqual(["image.src"]);
+  });
+
+  it("drops a group emptied all the way up", () => {
+    const nested = z.object({
+      title: z.string(),
+      sizes: z.object({ lg: z.object({ w: z.number() }) })
+    });
+    const fields = formModel(nested, { omit: ["sizes.lg.w"] });
+    expect(fields.map((field) => field.path)).toEqual(["title"]);
+  });
+
   it("refuses a schema that isn't an object", () => {
     expect(() => formModel(z.string())).toThrow(/must be an object/);
   });

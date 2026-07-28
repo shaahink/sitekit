@@ -111,8 +111,16 @@ function walk(
   }
 
   switch (typeName(node)) {
-    case "object":
-      return { ...common, kind: "group", fields: groupFields(node, path, root, omit) };
+    case "object": {
+      const fields = groupFields(node, path, root, omit);
+      /* A group whose every child was omitted has nothing to show, and drawing
+         it anyway gives the panel an empty box with a label still on it — which
+         reads as a field that failed to load rather than as one deliberately
+         withheld. shade's `images[].lg` was exactly this: two omitted pixel
+         sizes and a box labelled "Lg". */
+      if (fields.length === 0) return null;
+      return { ...common, kind: "group", fields };
+    }
 
     case "array": {
       if (!node.items) return null;
