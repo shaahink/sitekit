@@ -14,7 +14,10 @@ import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
-const assets = [["src/editor/editor.css", "dist/editor/editor.css"]];
+const assets = [
+  ["src/editor/editor.css", "dist/editor/editor.css"],
+  ["src/editor/inline.css", "dist/editor/inline.css"]
+];
 
 for (const [from, to] of assets) {
   mkdirSync(dirname(`${root}/${to}`), { recursive: true });

@@ -72,3 +72,34 @@ export function plural(n: number, one: string, many: string): string {
 export function fieldId(path: string): string {
   return `f-${path.replace(/[^a-z0-9]+/gi, "-")}`;
 }
+
+/** `hero.slides[0].alt` → `hero.slides[].alt`, the shape the form model uses
+    for array items. Concrete indices are what a page annotation carries; the
+    model only ever describes one row. */
+export function templateOf(path: string): string {
+  return path.replace(/\[\d+\]/g, "[]");
+}
+
+/** The descriptor for a concrete path, or undefined if the model has none.
+
+    Inline editing needs this where the panel does not: the panel renders the
+    model and therefore already holds each field, while an inline annotation
+    arrives as a bare string on someone's `<h1>` and has to be looked up. What
+    it is looked up *for* is the human label — an owner should be told they are
+    editing "Tagline", not `hero.tagline` — and the field kind, which decides
+    whether the value can be typed into a paragraph at all. */
+export function findField(fields: Field[], path: string): Field | undefined {
+  const wanted = templateOf(path);
+  for (const field of fields) {
+    if (field.path === wanted) return field;
+    if (field.kind === "group") {
+      const hit = findField(field.fields, path);
+      if (hit) return hit;
+    }
+    if (field.kind === "array") {
+      const hit = findField([field.item], path);
+      if (hit) return hit;
+    }
+  }
+  return undefined;
+}

@@ -7,9 +7,16 @@
 
        The widget ships on public pages, so it stays at ES2017 to reach as many
        visitors' browsers as the site itself does. The editor is one owner's
-       admin tool on one route, so ES2020 is honest — and it needs the lib as
-       well as the syntax, because reading a path like `slides[0].alt` uses
-       String.prototype.matchAll. */
+       admin tool, so ES2020 is honest — and it needs the lib as well as the
+       syntax, because reading a path like `slides[0].alt` uses
+       String.prototype.matchAll.
+
+       Inline editing put one file from this build — inline-gate.ts — onto
+       public pages, so that claim needed re-checking rather than inheriting.
+       It holds: the gate compiles to URLSearchParams, sessionStorage and a
+       dynamic import, all of which every site's own review-gate.js has shipped
+       publicly since session 3. The editor itself is still only ever fetched
+       by someone who asked for it. */
     "target": "ES2020",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": []

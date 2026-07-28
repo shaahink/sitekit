@@ -59,7 +59,16 @@
       "types": "./dist/editor/index.d.ts",
       "default": "./dist/editor/index.js"
     },
+    "./editor/inline": {
+      "types": "./dist/editor/inline.d.ts",
+      "default": "./dist/editor/inline.js"
+    },
+    "./editor/inline-gate": {
+      "types": "./dist/editor/inline-gate.d.ts",
+      "default": "./dist/editor/inline-gate.js"
+    },
     "./editor/editor.css": "./dist/editor/editor.css",
+    "./editor/inline.css": "./dist/editor/inline.css",
     "./package.json": "./package.json"
   },
   "scripts": {
