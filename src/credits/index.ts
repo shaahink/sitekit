@@ -10,8 +10,8 @@ export interface CreditsOptions {
   siteName: string;
   /** The client site's canonical URL. Goes into the JSON-LD. */
   siteUrl: string;
-  /** Where the credit points. Defaults to email until the studio domain
-      exists; changing this default and bumping the kit updates the fleet. */
+  /** Where the credit points. Defaults to the studio site; changing this
+      default and bumping the kit updates the fleet. */
   href?: string;
   /** The visible anchor text. Default "sk". */
   label?: string;
@@ -21,7 +21,17 @@ export interface CreditsOptions {
   className?: string;
 }
 
-const DEFAULT_HREF = "mailto:shaahin69@gmail.com";
+/* The credit is the acquisition channel, so it points at the work rather than
+   at an inbox: a mailto asks a stranger to compose an email to somebody they
+   have not decided to trust yet, where a link asks them to look. sk's own site
+   went live on 2026-07-28 with four case studies on it, which is the thing
+   worth reaching from five footers.
+
+   It stays a bare `.vercel.app` deliberately. `sk.works` is registered when
+   Shahin buys it (SHAHIN.md #10) and the swap is this constant plus a kit
+   release — the same one-line change this was, and a redirect at the domain
+   end means no footer is ever briefly wrong. */
+const DEFAULT_HREF = "https://sk-works.vercel.app";
 
 /** The visible link: `<a class="sk-credit" href="…" rel="author">sk</a>`. */
 export function creditsAnchor(options: CreditsOptions): string {

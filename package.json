@@ -1,7 +1,7 @@
 {
   "name": "@shaahink/sitekit",
-  "version": "0.9.0",
-  "description": "Shared logic for the sk site fleet: feedback intake, screenshot proxy, widget internals, credits, the dual header emitter, site URLs and sitemaps from one source, the analytics tag, and the owner's editor.",
+  "version": "0.10.0",
+  "description": "Shared logic for the sk site fleet: feedback intake, screenshot proxy, widget internals, credits, the dual header emitter, site URLs and sitemaps from one source, the analytics tag and its stats reader, and the owner's editor.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -50,6 +50,10 @@
     "./analytics": {
       "types": "./dist/analytics/index.d.ts",
       "default": "./dist/analytics/index.js"
+    },
+    "./stats": {
+      "types": "./dist/analytics/stats.d.ts",
+      "default": "./dist/analytics/stats.js"
     },
     "./cms": {
       "types": "./dist/cms/index.d.ts",

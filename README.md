@@ -18,6 +18,7 @@ reference for how a site consumes it.
 | `@shaahink/sitekit/headers` | The dual header emitter: one config, emitted as `vercel.json` and Cloudflare `_headers`/`_redirects` |
 | `@shaahink/sitekit/seo` | Site URLs, canonicals and sitemaps from one source |
 | `@shaahink/sitekit/analytics` | The Umami tag |
+| `@shaahink/sitekit/stats` | Reading that instance back, server side: a cached login, team-scoped enumeration, and per-site totals with the previous period alongside |
 | `@shaahink/sitekit/cms` | The owner's editor, server side: Google ID token verification, a signed session cookie, a form model generated from a collection's Zod schema, and a comment-preserving YAML writer that commits through the GitHub App |
 | `@shaahink/sitekit/editor` | The owner's editor, browser side: `mountEditor(element)` builds the whole panel from the form model. Chrome included — see below |
 | `@shaahink/sitekit/editor/editor.css` | That panel's stylesheet, for a site to copy into `public/` |

@@ -6,7 +6,7 @@ const ELFINE = { siteName: "Elfine", siteUrl: "https://elfine-site.vercel.app" }
 describe("creditsAnchor", () => {
   it("emits the sk line with class hook and author rel", () => {
     expect(creditsAnchor(ELFINE)).toBe(
-      '<a class="sk-credit" href="mailto:shaahin69@gmail.com" rel="author">sk</a>'
+      '<a class="sk-credit" href="https://sk-works.vercel.app" rel="author">sk</a>'
     );
   });
 
@@ -31,7 +31,7 @@ describe("creditsJsonLd", () => {
       creator: {
         "@type": "Organization",
         name: "sk",
-        url: "mailto:shaahin69@gmail.com"
+        url: "https://sk-works.vercel.app"
       }
     });
   });
