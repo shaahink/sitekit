@@ -2,12 +2,19 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     /* Build-time code: this runs inside a site's Astro build, in Node, and
-       never in a browser or a request handler. It touches no platform API of
-       its own — it reads four properties off a resolved config and returns an
-       object — so no lib beyond the language itself is needed, and `types: []`
-       keeps it that way deliberately rather than by accident. */
+       never in a browser or a request handler. `lib` therefore stays at the
+       language itself — no DOM, no WebWorker — so anything reaching for a
+       platform API by habit fails here rather than at a site's build.
+
+       `types: ["node"]` replaced `[]` in 0.12.0, when the annotation checker
+       arrived: reading the built pages back is what it does, and there is no
+       way to read a file without Node. The empty list was the right default
+       while this directory held only editorRoute, which reads four properties
+       off a resolved config and returns an object. Node is now admitted here
+       and here only — src/cms and src/editor still declare `types: []`, which
+       is where it would actually be a bug. */
     "lib": ["ES2023"],
-    "types": []
+    "types": ["node"]
   },
   "include": ["src/astro"]
 }

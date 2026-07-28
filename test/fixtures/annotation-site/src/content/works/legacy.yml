@@ -1,0 +1,4 @@
+# Deliberately .yml. listEntries() accepts it and filePath() only ever asks for
+# .yaml, so the panel lists this entry and 404s when an owner opens it.
+title: The legacy work
+body: Spelled the other way

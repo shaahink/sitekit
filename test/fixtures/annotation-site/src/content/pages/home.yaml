@@ -1,0 +1,13 @@
+# A miniature of the shape every site in the fleet uses: sections of strings,
+# a picture whose pixel sizes are omitted from the form, and a section switch.
+hero:
+  title: A title
+  tagline: A tagline
+  visible: true
+about:
+  body: Some words about the work
+  portrait:
+    src: /images/portrait.jpg
+    alt: A portrait
+    w: 800
+    h: 600

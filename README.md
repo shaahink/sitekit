@@ -20,8 +20,12 @@ reference for how a site consumes it.
 | `@shaahink/sitekit/analytics` | The Umami tag |
 | `@shaahink/sitekit/stats` | Reading that instance back, server side: a cached login, team-scoped enumeration, and per-site totals with the previous period alongside |
 | `@shaahink/sitekit/cms` | The owner's editor, server side: Google ID token verification, a signed session cookie, a form model generated from a collection's Zod schema, and a comment-preserving YAML writer that commits through the GitHub App |
+| `@shaahink/sitekit/visibility` | Reading a section's `visible` flag the one safe way — a missing flag means *shown* |
 | `@shaahink/sitekit/editor` | The owner's editor, browser side: `mountEditor(element)` builds the whole panel from the form model. Chrome included — see below |
-| `@shaahink/sitekit/editor/editor.css` | That panel's stylesheet, for a site to copy into `public/` |
+| `@shaahink/sitekit/editor/inline` | Editing the words on the page they are on: `startInlineEditor()`, driven by the `data-sk-edit` annotations |
+| `@shaahink/sitekit/editor/inline-gate` | The one-line entry a public page loads to decide whether inline editing should start at all |
+| `@shaahink/sitekit/editor/editor.css`, `.../inline.css` | Those two surfaces' stylesheets, for a site to copy into `public/` |
+| `@shaahink/sitekit/astro` | The two build-time integrations: `editorRoute()` injects the editor's page, `checkAnnotations()` fails the build when an annotation stops resolving — see below |
 
 Entry points are separate on purpose: a site importing handlers never pulls in
 widget code, and the handler entries typecheck against WebWorker globals only —
@@ -63,6 +67,37 @@ sitekit-editor-css [destination]   # default public/editor-panel.css
 it and diffs. A per-site copy script would have meant editing four repos the
 day the asset moved inside `dist`, which is exactly the boundary this lift
 exists to get right.
+
+### What a site's `astro.config.mjs` says
+
+```js
+import { checkAnnotations, editorRoute } from "@shaahink/sitekit/astro";
+import { editable } from "./src/content/schema.js";
+
+integrations: [
+  editorRoute({ title: "Edit — Bruce Nemeth" }),
+  checkAnnotations({ collections: editable })
+]
+```
+
+`editorRoute` injects the editor's page, so no site owns one. The URL does not
+move: an injected route follows the site's own `build.format`, so a site on
+`"file"` still serves `/edit.html`.
+
+`checkAnnotations` reads the built pages back in `astro:build:done` and fails
+the build on a `data-sk-edit` that would not save — a path resolving to nothing
+in the content, a path with no field in the form model, the same path twice on
+one page, annotations with no `data-sk-collection` above them. It reaches both
+verdicts the same way the page does at runtime, so the build and the editor
+cannot disagree about what is broken. What it deliberately does *not* fail on
+is everything the runtime sends to the panel instead: a value inside
+`aria-hidden`, an element wrapping the design's own spans, text a template
+transforms. Those are correct annotations that simply cannot be edited in
+place.
+
+It takes the same `editable` map `api/content.ts` hands `createContentHandler`,
+which is why that map has always been a Zod-only module with nothing
+Astro-shaped in it. Nothing new is declared, so nothing can drift.
 
 ## The portability contract
 
@@ -123,16 +158,31 @@ machinery that already exists and is already tested.
 
 ```
 npm install
-npm run build   # tsc, three configs: server (WebWorker) + widget (DOM, ES2017)
-                # + editor (DOM, ES2020), then the editor's stylesheet is copied
+npm run build   # tsc, four configs: server (WebWorker) + widget (DOM, ES2017)
+                # + editor (DOM, ES2020) + astro (Node), then the stylesheets
+                # and the .astro route are copied
 npm test        # vitest
+npm run proof   # build ../site-template against this working copy
 ```
 
-Three configs because the three halves have different floors. Handlers must not
+Four configs because the four halves have different floors. Handlers must not
 reach for `document` or a Node built-in, so they typecheck against WebWorker
 globals only. The widget ships on public pages and stays at ES2017 to reach as
 many visitors as the sites do. The editor is one route for one owner, so ES2020
-is honest — and it needs the lib as well as the syntax.
+is honest — and it needs the lib as well as the syntax. `src/astro` is the only
+place Node types are admitted, because reading a site's built pages back is
+what the annotation checker does.
+
+**`npm run proof` is the one that catches integration bugs.** Both exports in
+`./astro` only do anything inside a real Astro build; a unit test calls their
+hooks directly, which proves what they do with the arguments they are given and
+nothing about whether Astro gives them those arguments. Every fact the kit has
+been wrong about there — that `insertDirective` merges rather than replaces,
+that an injected route inherits `build.format` — came from reading a real
+build. The script overlays this checkout's `dist` onto site-template's
+installed copy, builds, and puts the installed copy back. It is not part of
+`prepublishOnly`, because publishing happens from CI where there is no sibling
+checkout.
 
 `dist` is emptied before every build. `files: ["dist"]` publishes whatever is in
 there, and `tsc` only ever adds, so a moved file used to ship forever.

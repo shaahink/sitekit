@@ -44,6 +44,15 @@
    Reading that off the resolved config is the whole reason this is an
    integration and not a page the sites import. */
 
+/* The other thing a site's astro.config.mjs asks the kit for, re-exported so
+   that stays one import rather than two — the two integrations are configured
+   side by side in the same array, and a site that has annotations almost
+   always has the route as well. They remain separate integrations because the
+   converse is not true: `sk-studio` has annotations and still owns its editor
+   page (SCALE.md §9), and the template scopes a page before annotating it. */
+export { checkAnnotations } from "./annotations.js";
+export type { AnnotationCheckOptions, AnnotationProblem } from "./annotations.js";
+
 /* Astro is a peer, not a dependency: the kit is installed by six sites that
    all have their own copy, and pulling a second one in to typecheck four
    property reads would be the tail wagging the dog. The surface used here is

@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A title — data-sk-edit="ghost.in.the.title"</title>
+    <script>
+      /* Astro inlines small scripts. The inline editor's own bundle contains
+         the literal selector below, so a scan that reads script bodies finds
+         an annotation nobody wrote — on every page that carries the editor. */
+      document.querySelectorAll("[data-sk-edit]");
+    </script>
+  </head>
+  <body data-sk-collection="homePage" data-sk-entry="home" data-sk-editor-path="/edit.html">
+    <!-- A commented-out annotation: <p data-sk-edit="ghost.in.a.comment">x</p> -->
+    <h1 DATA-SK-EDIT="hero.title" title="Bruce > everyone">A title</h1>
+    <p data-sk-edit='hero.tagline' hidden>A tagline</p>
+    <p data-sk-edit=about.body class="prose">Some words about the work</p>
+    <img src="/images/portrait.jpg" alt="A portrait" width="800" height="600" />
+  </body>
+</html>
