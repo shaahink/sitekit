@@ -6,7 +6,14 @@
    Writes vercel.json, always, in the exact form the six sites already commit.
    With --cloudflare it also writes _headers and _redirects — into public/ by
    default, because Astro copies that directory into dist/ and Cloudflare Pages
-   reads both files from the build output root.
+   reads both files from the build output root — and functions/_middleware.js,
+   which goes to the site root whatever that directory is, because Pages reads
+   functions/ from the repository rather than from the build output.
+
+   The middleware is not a fourth spelling of the same thing: _headers is not
+   applied to anything a Function returns, so on Cloudflare it is the only way
+   the API responses get the headers the config declares. Session 9.5 Task 3
+   finding 1 measured five of five on the static half and none on the other.
 
    This replaces six copies of scripts/emit-headers.mjs. They had not drifted in
    logic — normalised, all six were the same eleven lines — but they were four
@@ -31,7 +38,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { cloudflareHeaders, cloudflareRedirects, vercelJson } from "../dist/headers/index.js";
+import {
+  cloudflareHeaders,
+  cloudflareMiddleware,
+  cloudflareRedirects,
+  vercelJson
+} from "../dist/headers/index.js";
 
 const args = process.argv.slice(2);
 const flag = args.indexOf("--cloudflare");
@@ -67,15 +79,30 @@ if (!config || !Array.isArray(config.headers)) {
   process.exit(1);
 }
 
-const artefacts = [["vercel.json", vercelJson(config)]];
+/* Every artefact is rendered before any of them is written, so a config the
+   emitters refuse leaves the site's committed files exactly as they were. A
+   half-emitted vercel.json is worse than no run at all. */
+const artefacts = [];
+try {
+  artefacts.push(["vercel.json", vercelJson(config)]);
 
-if (cloudflare) {
-  artefacts.push([join(cloudflareDir, "_headers"), cloudflareHeaders(config)]);
-  /* An empty _redirects file says the same thing as no file and costs a
-     confusing diff, so a site with no redirects gets none. */
-  if (config.redirects?.length) {
-    artefacts.push([join(cloudflareDir, "_redirects"), cloudflareRedirects(config)]);
+  if (cloudflare) {
+    artefacts.push([join(cloudflareDir, "_headers"), cloudflareHeaders(config)]);
+    /* An empty _redirects file says the same thing as no file and costs a
+       confusing diff, so a site with no redirects gets none. */
+    if (config.redirects?.length) {
+      artefacts.push([join(cloudflareDir, "_redirects"), cloudflareRedirects(config)]);
+    }
+    /* Root-relative on purpose: functions/ is read from the repository at build
+       time, so it does not follow --cloudflare's directory into dist/. */
+    artefacts.push([join("functions", "_middleware.js"), cloudflareMiddleware(config)]);
   }
+} catch (error) {
+  /* A refusal is a sentence about this site's config, not a bug in the kit.
+     Node's default handler would print a stack through dist/headers/index.js
+     on top of it, which buries the one line that says what to change. */
+  console.error(`sitekit-headers: ${error?.message ?? error}\n  in ${configPath}`);
+  process.exit(1);
 }
 
 for (const [name, text] of artefacts) {
