@@ -36,6 +36,10 @@
       "types": "./dist/widget/index.d.ts",
       "default": "./dist/widget/index.js"
     },
+    "./widget/chrome": {
+      "types": "./dist/widget/chrome.d.ts",
+      "default": "./dist/widget/chrome.js"
+    },
     "./credits": {
       "types": "./dist/credits/index.d.ts",
       "default": "./dist/credits/index.js"

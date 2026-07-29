@@ -34,8 +34,19 @@ import { fileURLToPath } from "node:url";
 
 const kit = dirname(dirname(fileURLToPath(import.meta.url)));
 const site = process.argv[2] ?? join(kit, "..", "site-template");
-const installed = join(site, "node_modules", "@shaahink", "sitekit", "dist");
-const backup = `${installed}.proof-backup`;
+const home = join(site, "node_modules", "@shaahink", "sitekit");
+
+/* Two things are overlaid, not one. `dist` is the code; `package.json` is the
+   `exports` map that decides which of it a site can reach at all. Overlaying
+   only dist was enough for four releases and then 0.16.0 added a subpath —
+   `@shaahink/sitekit/widget/chrome` — and the proof could not see it: the
+   files were there, the installed release's exports map was not, and Astro
+   failed to resolve an import that is correct. A proof that cannot prove a new
+   entry point is a proof of the last release. */
+const overlays = [
+  { path: join(home, "dist"), from: join(kit, "dist") },
+  { path: join(home, "package.json"), from: join(kit, "package.json") }
+];
 
 if (!existsSync(join(site, "astro.config.mjs"))) {
   console.error(`no site to build at ${site} — pass one as an argument`);
@@ -48,20 +59,27 @@ if (!existsSync(join(kit, "dist", "astro", "index.js"))) {
 
 console.log(`proving ${kit}/dist against ${site}`);
 
-rmSync(backup, { recursive: true, force: true });
-cpSync(installed, backup, { recursive: true });
+for (const overlay of overlays) {
+  overlay.backup = `${overlay.path}.proof-backup`;
+  rmSync(overlay.backup, { recursive: true, force: true });
+  cpSync(overlay.path, overlay.backup, { recursive: true });
+}
 
 let code = 1;
 try {
-  rmSync(installed, { recursive: true, force: true });
-  cpSync(join(kit, "dist"), installed, { recursive: true });
+  for (const { path, from } of overlays) {
+    rmSync(path, { recursive: true, force: true });
+    cpSync(from, path, { recursive: true });
+  }
   code = spawnSync("npm", ["run", "build"], { cwd: site, stdio: "inherit", shell: true }).status ?? 1;
 } finally {
   /* The site is left exactly as it was found. A half-overlaid node_modules is
      the sort of thing that gets debugged for an hour a week later. */
-  rmSync(installed, { recursive: true, force: true });
-  cpSync(backup, installed, { recursive: true });
-  rmSync(backup, { recursive: true, force: true });
+  for (const { path, backup } of overlays) {
+    rmSync(path, { recursive: true, force: true });
+    cpSync(backup, path, { recursive: true });
+    rmSync(backup, { recursive: true, force: true });
+  }
 }
 
 /* The second half: the commands a site runs.

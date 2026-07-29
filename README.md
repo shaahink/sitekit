@@ -13,7 +13,8 @@ reference for how a site consumes it.
 | --- | --- |
 | `@shaahink/sitekit/feedback` | The feedback intake handler factory — validates, uploads screenshots to an orphan branch, files GitHub issues |
 | `@shaahink/sitekit/shot` | The screenshot proxy handler factory — serves stored screenshots so GitHub can render them inside private repos |
-| `@shaahink/sitekit/widget` | The review-mode widget's logic: element refinement, CSS paths, section/context extraction, image downscaling, the POST envelope. No chrome — each site owns its own DOM, strings and palette |
+| `@shaahink/sitekit/widget` | The review-mode widget's mechanics: element refinement, CSS paths, section/context extraction, image downscaling, the POST envelope |
+| `@shaahink/sitekit/widget/chrome` | The widget a reviewer sees: `mountReviewWidget()` builds the pill, the picker, the composer, the pins. English, French and Farsi included; a site keeps only `feedback-chrome.css` — see below |
 | `@shaahink/sitekit/credits` | The `sk` footer credit: anchor plus schema.org JSON-LD |
 | `@shaahink/sitekit/headers` | The dual header emitter: one config, emitted as `vercel.json` and Cloudflare `_headers`/`_redirects` |
 | `@shaahink/sitekit/seo` | Site URLs, canonicals and sitemaps from one source |
@@ -31,14 +32,51 @@ Entry points are separate on purpose: a site importing handlers never pulls in
 widget code, and the handler entries typecheck against WebWorker globals only —
 no DOM, no Node built-ins.
 
-### Why `./editor` ships chrome and `./widget` doesn't
+### Where the chrome/palette line actually falls
 
-The widget appears on pages a visitor sees, so each site owns its DOM, strings
-and palette — that is PLAN goal 2, and it is a feature. The editor is one
-owner's admin panel on one route, and four hand-maintained copies of it is
-exactly what this package exists to prevent. CLAUDE.md's "no design system in
-the kit" rule was scoped on 2026-07-28 to say so: it governs public pages.
-Nobody's face is their admin panel.
+This section used to be called "why `./editor` ships chrome and `./widget`
+doesn't", and the answer it gave was that the widget appears on pages a visitor
+sees, so each site owns its DOM, strings and palette. What that bought was six
+copies of one 626-line file at three versions, two of them forked to translate
+a table of twenty-six strings — so a widget change was six hand edits and two
+by-eye re-merges, and a bilingual new site hand-translated the table again.
+0.16.0 ended it. **Both surfaces now ship their chrome; what a site owns is the
+palette.**
+
+The line is not "public versus admin" after all. It is *who is looking*. A
+reviewer is looking at the client's own page and the widget sits on top of it,
+so `feedback-chrome.css` stays per-site and the class names it styles are a
+contract (`WIDGET_CLASSES`, enforced against `chrome.ts` by a test — renaming
+one would break six stylesheets *silently*, because an unstyled widget still
+works). Nothing else about the widget was ever site-specific: the DOM was
+identical in all six copies and the strings were a table.
+
+The editor is one owner's admin panel on one route, and four hand-maintained
+copies of it is exactly what this package exists to prevent. CLAUDE.md's "no
+design system in the kit" rule was scoped on 2026-07-28 to say so: it governs
+public pages. Nobody's face is their admin panel.
+
+```js
+// src/scripts/review-gate.js — the only feedback code a public visitor runs
+if (localStorage.getItem("review-mode-key")) {
+  Promise.all([
+    import("@shaahink/sitekit/widget/chrome"),
+    import("./feedback-chrome.css")
+  ]).then(([widget]) => widget.mountReviewWidget());
+}
+```
+
+Both imports are dynamic so neither lands in the bundle every public visitor
+downloads, and `mountReviewWidget` is *called* rather than the module
+bare-imported, because this package is `sideEffects: false` and a bare import of
+a side-effecting module is tree-shaken away to nothing. Measured on
+site-template: the public bundle grew 32 bytes and carries no widget class; the
+reviewer-only chunk grew 2.9 kB, which is French and Farsi arriving on every
+site in the fleet.
+
+A site picks its language by declaring one — the table follows `<html lang>`,
+by primary subtag, falling back to English rather than to blanks — and overrides
+any word with `mountReviewWidget({ strings: { send: "Enviar" } })`.
 
 A site therefore gets no copy. It tunes the look with the `--sk-editor-*`
 custom properties — `bg`, `raise`, `ink`, `line`, `accent`, `font` are enough,
@@ -179,10 +217,17 @@ hooks directly, which proves what they do with the arguments they are given and
 nothing about whether Astro gives them those arguments. Every fact the kit has
 been wrong about there — that `insertDirective` merges rather than replaces,
 that an injected route inherits `build.format` — came from reading a real
-build. The script overlays this checkout's `dist` onto site-template's
-installed copy, builds, and puts the installed copy back. It is not part of
+build. The script overlays this checkout's `dist` **and `package.json`** onto
+site-template's installed copy, builds, and puts both back. It is not part of
 `prepublishOnly`, because publishing happens from CI where there is no sibling
 checkout.
+
+The `package.json` half was added at 0.16.0 and is the same lesson one layer
+out: overlaying only `dist` meant the proof could not see a *new* entry point at
+all, because the installed release's `exports` map decides what a site can
+resolve. `./widget/chrome` was on disk and unreachable, and the build failed on
+an import that was correct. A proof that cannot prove a new subpath is a proof
+of the last release.
 
 `dist` is emptied before every build. `files: ["dist"]` publishes whatever is in
 there, and `tsc` only ever adds, so a moved file used to ship forever.
