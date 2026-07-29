@@ -36,6 +36,10 @@ export interface ChangeRequest {
 export interface RequestResult {
   number: number;
   url: string;
+  /** Whether the label the agent loop reads by is actually on the issue. False
+      is not the owner's problem — their words are filed either way — but it is
+      somebody's, and see below for why nothing used to say so. */
+  labelled: boolean;
 }
 
 /** The most an owner can type. Long enough for a real paragraph, short enough
@@ -70,9 +74,13 @@ export async function fileRequest(
     body: payload
   });
 
-  /* A repository that has never seen this label answers 422 rather than
-     creating it. The feedback handler learned this first; losing the owner's
-     words to a missing label would be the worst possible trade. */
+  /* Insurance rather than a guard, and labelled as such since 0.16.0. The
+     theory was that a repository which has never seen this label answers 422;
+     measurement says GitHub creates the label as it files the issue, so this
+     branch has never been reached by anything but its own test. It stays
+     because losing the owner's paragraph to a label would be the worst trade
+     on this route, and one unreached branch is a cheap premium. What it is
+     *not* is the failure that actually happens — that one is below. */
   if (result.status === 422) {
     const { labels: _labels, ...withoutLabels } = payload;
     result = await gh(`/repos/${access.repo}/issues`, {
@@ -84,7 +92,67 @@ export async function fileRequest(
   }
 
   if (!result.ok) throw new RequestError(`file request: ${result.status} ${result.text}`);
-  return { number: result.data?.number as number, url: result.data?.html_url as string };
+
+  const number = result.data?.number as number;
+  return {
+    number,
+    url: result.data?.html_url as string,
+    labelled: await labelled(access, number, label, result.data)
+  };
+}
+
+/* The failure that does happen, and used to happen in silence.
+   ---------------------------------------------------------------------------
+   Labels are a *write* to an issue, so an App installation without push access
+   files the issue happily — 201, a number, a URL, an owner told their words
+   arrived — and GitHub drops the `labels` from the payload without saying a
+   word. Nothing in the response is an error. The issue is real and the owner
+   is right to believe it landed.
+
+   What is not real is the thing the label was for. Session 10's loop finds a
+   request *by its label*, so a dropped label means an ask that exists, reads
+   correctly to a human looking at the issue list, and is invisible to the only
+   reader it was addressed to. That is the shape of fault this whole panel
+   exists to avoid: not a break, an absence that reports success.
+
+   So: read the labels back off the created issue rather than assuming them,
+   try once to attach the label as its own write (which is the same permission,
+   but it costs one request to be sure it is the permission and not the
+   creation path), and if it still is not there, say so where an operator can
+   see it — the function log — and hand the verdict back to the caller. */
+async function labelled(
+  access: RepoAccess,
+  issue: number,
+  label: string,
+  created: unknown
+): Promise<boolean> {
+  if (carries(created, label)) return true;
+
+  const added = await gh(`/repos/${access.repo}/issues/${issue}/labels`, {
+    token: access.token,
+    userAgent: access.userAgent,
+    method: "POST",
+    body: { labels: [label] }
+  });
+  if (added.ok && carries({ labels: added.data }, label)) return true;
+
+  console.error(
+    `cms: issue #${issue} was filed without the "${label}" label ` +
+      `(adding it answered ${added.status}). The credential can create issues but not ` +
+      `label them — an installation without push access — so anything reading requests ` +
+      `by that label will not see this one.`
+  );
+  return false;
+}
+
+/** GitHub spells a label as an object with a name; a repository's own API has
+    been seen to hand back plain strings, so both are read. */
+function carries(issue: unknown, label: string): boolean {
+  const labels = (issue as { labels?: unknown })?.labels;
+  if (!Array.isArray(labels)) return false;
+  return labels.some((entry) =>
+    typeof entry === "string" ? entry === label : (entry as { name?: string })?.name === label
+  );
 }
 
 /** The first line, trimmed to something an issue list can show. The whole text

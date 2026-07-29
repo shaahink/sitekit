@@ -327,6 +327,11 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       strings,
       dirty,
       uploads,
+      /* Same collection and entry the form came from, so the handler can read
+         the field's own stored value rather than being told a path. */
+      previewUrl: (fieldPath) =>
+        `${content}?collection=${encodeURIComponent(collection)}&entry=${encodeURIComponent(entry)}` +
+        `&preview=${encodeURIComponent(fieldPath)}`,
       changed: () => {
         /* A new photograph with nothing written about it holds Save. The
            schema defaults `alt` to "" and will accept the commit happily, so

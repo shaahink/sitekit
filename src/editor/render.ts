@@ -25,6 +25,11 @@ export interface RenderContext {
   changed(): void;
   /** Photographs chosen but not yet saved. */
   uploads: Uploads;
+  /** Where to ask the handler for the picture an image field points at, when
+      the site does not serve the stored path itself — every `astro:assets`
+      path in the fleet. Optional so a caller that renders a form outside the
+      panel (a test, a fixture) needs nothing. */
+  previewUrl?(fieldPath: string): string;
 }
 
 /** The photographs waiting to go in the next commit.
@@ -361,9 +366,38 @@ function imageControl(field: ImageField, values: unknown, context: RenderContext
   wrap.append(el("p", "sk-editor__label", field.label));
   if (field.help) wrap.append(el("p", "sk-editor__help", field.help));
 
+  /* The photograph an owner is about to replace, and the one part of this
+     control that used to be a lie on a third of the fleet.
+     -----------------------------------------------------------------------
+     A stored `src` is only a URL on a site whose pictures live in `public/`.
+     Where `astro:assets` owns them the content says `/src/assets/...`, which
+     is a path into the *repository* that build time resolves and no server
+     ever serves — so this drew a 2px broken-image hairline on all five of
+     nimagiti's image controls (09.6, measured in a browser).
+
+     So the browser is asked first, exactly as before, and the handler is the
+     fallback: `?preview=<field>` reads the field's own value out of the
+     content and answers with the bytes from the repository (cms/preview.ts).
+     One attempt, and only for the value that came from the file — a `data:`
+     URI or an `upload:` token has nothing to do with what is committed, and
+     falling back for those would show the *previous* photograph beside a
+     message saying the new one is ready.
+
+     If neither answers, the frame reads as empty rather than as broken. An
+     owner cannot act on a hairline; "no picture here" is at least true. */
   const preview = el("img", "sk-editor__preview");
   preview.alt = "";
   preview.loading = "lazy";
+  let fromRepo = false;
+  preview.addEventListener("error", () => {
+    if (!fromRepo && context.previewUrl && preview.getAttribute("src") === current) {
+      fromRepo = true;
+      preview.src = context.previewUrl(field.path);
+      return;
+    }
+    wrap.classList.add("is-empty");
+  });
+  preview.addEventListener("load", () => wrap.classList.remove("is-empty"));
   if (current) preview.src = current;
   else wrap.classList.add("is-empty");
   wrap.append(preview);

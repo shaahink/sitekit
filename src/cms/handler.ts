@@ -27,10 +27,20 @@
 import { installationToken } from "../feedback/app-auth.js";
 import { sameHost } from "../feedback/guards.js";
 import { json } from "../feedback/http.js";
-import { ConflictError, listEntries, readFile, writeFile, type RepoAccess } from "./contents.js";
+import {
+  ConflictError,
+  listEntries,
+  readBinary,
+  readFile,
+  writeFile,
+  type RepoAccess
+} from "./contents.js";
 import { commitFiles } from "./tree.js";
 import { prepareUploads, resolveUploads, UploadError, type PreparedUpload } from "./uploads.js";
 import { formModel } from "./form.js";
+import { imageType, previewPaths } from "./preview.js";
+import { findField, valueAt } from "../editor/values.js";
+import type { Field } from "./fields.js";
 import { ownerHome } from "./home.js";
 import { fileRequest, RequestError } from "./requests.js";
 import { applyEdits, readValues, type Edit } from "./yaml.js";
@@ -113,6 +123,18 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
       const file = await readFile(path, access);
       if (!file) return json({ ok: false, error: "That entry doesn't exist." }, 404);
 
+      const fields = formModel(config.schema, { ...(config.omit ? { omit: config.omit } : {}) });
+      const values = readValues(file.text);
+
+      /* The picture behind one image field, served out of the repository. Only
+         reached when the browser could not load the stored `src` itself — see
+         preview.ts, and the picker in editor/render.ts for the fallback. It is
+         a branch of this route rather than an endpoint of its own for the same
+         reason `?home` is: a second `api/` file is a second file in six site
+         repos. */
+      const wanted = url.searchParams.get("preview");
+      if (wanted !== null) return preview(wanted, fields, values, path, access);
+
       return withGate(
         json({
           ok: true,
@@ -120,8 +142,8 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
           entry,
           path,
           sha: file.sha,
-          fields: formModel(config.schema, { ...(config.omit ? { omit: config.omit } : {}) }),
-          values: readValues(file.text)
+          fields,
+          values
         }),
         gate
       );
@@ -315,6 +337,62 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
   }
 
   return { GET, POST };
+}
+
+/* --- the picker's preview ---------------------------------------------- */
+
+/** The photograph one image field currently points at, as bytes.
+
+    Every 404 here is deliberately the same sentence in the same shape as a
+    missing entry: this route is behind the owner's session, but a 404 that
+    distinguished "no such field" from "no such file" would still be answering
+    questions about the inside of a private repository. */
+async function preview(
+  wanted: string,
+  fields: Field[],
+  values: unknown,
+  entryPath: string,
+  access: RepoAccess
+): Promise<Response> {
+  const missing = json({ ok: false, error: "There's no picture there." }, 404);
+
+  /* An image field, found the way the annotation checker finds one, so
+     `slides[2].src` matches the `slides[].src` the schema describes. Any other
+     kind of field is a refusal: the whole guard against this becoming a way to
+     read a repository is that only a picture's own path can be asked for. */
+  const field = findField(fields, wanted);
+  if (!field || field.kind !== "image") return missing;
+
+  const src = valueAt(values, wanted);
+  if (typeof src !== "string") return missing;
+
+  const type = imageType(src);
+  if (!type) return missing;
+
+  for (const candidate of previewPaths(src, entryPath)) {
+    let found;
+    try {
+      found = await readBinary(candidate, access);
+    } catch (error) {
+      console.error("cms preview failed:", (error as Error).message);
+      return json({ ok: false, error: "Couldn't load that picture." }, 502);
+    }
+    if (!found) continue;
+    return new Response(found.bytes, {
+      headers: {
+        "content-type": type,
+        /* An SVG off the site's own origin is a document that could carry
+           script. It cannot need any of it to draw a picture. */
+        "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
+        "x-content-type-options": "nosniff",
+        /* One owner, one photograph they are in the middle of replacing. A
+           cached preview of the picture they just changed is worse than a
+           second request. */
+        "cache-control": "private, no-store"
+      }
+    });
+  }
+  return missing;
 }
 
 /* --- the gate --------------------------------------------------------- */

@@ -419,7 +419,11 @@ describe("ownerHome", () => {
 
 describe("fileRequest", () => {
   it("titles the issue from the first line and keeps the whole text in the body", async () => {
-    fetchMock.mockResolvedValue(respond({ number: 12, html_url: "https://github.com/i/12" }, 201));
+    /* With the label on it, which is what GitHub does when the credential can
+       write labels — see the three tests below for when it does not. */
+    fetchMock.mockResolvedValue(
+      respond({ number: 12, html_url: "https://github.com/i/12", labels: [{ name: "content-request" }] }, 201)
+    );
     await fileRequest(ACCESS, {
       text: "A workshops section\n\nThree photographs and a paragraph.",
       page: "/about.html",
@@ -437,12 +441,52 @@ describe("fileRequest", () => {
   it("retries without labels on a 422, rather than losing the owner's words", async () => {
     fetchMock.mockResolvedValueOnce(respond({ message: "Validation Failed" }, 422));
     fetchMock.mockResolvedValueOnce(respond({ number: 13, html_url: "https://github.com/i/13" }, 201));
+    fetchMock.mockResolvedValueOnce(respond([{ name: "content-request" }], 200));
     const filed = await fileRequest(ACCESS, {
       text: "Something",
       who: { name: "B", email: "b@example.com" }
     });
     expect(filed.number).toBe(13);
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body).labels).toBeUndefined();
+  });
+
+  /* The failure that actually happens, and used to happen in silence: an App
+     installation without push access files the issue and GitHub drops the
+     `labels` from the payload with a 201 and no word about it. Session 10's
+     loop finds a request by that label, so the ask exists, reads correctly to
+     anyone looking at the issue list, and is invisible to its only reader. */
+  it("reads the label back off the created issue rather than assuming it", async () => {
+    fetchMock.mockResolvedValue(
+      respond({ number: 14, html_url: "https://github.com/i/14", labels: [{ name: "content-request" }] }, 201)
+    );
+    const filed = await fileRequest(ACCESS, { text: "A workshops section", who: { name: "B", email: "b@e" } });
+    expect(filed.labelled).toBe(true);
+    /* Nothing to fix, so nothing else is asked of GitHub. */
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("attaches a dropped label as its own write, which is one request to be sure", async () => {
+    fetchMock.mockResolvedValueOnce(respond({ number: 15, html_url: "https://github.com/i/15", labels: [] }, 201));
+    fetchMock.mockResolvedValueOnce(respond([{ name: "content-request" }], 200));
+    const filed = await fileRequest(ACCESS, { text: "A workshops section", who: { name: "B", email: "b@e" } });
+    expect(filed.labelled).toBe(true);
+    expect(fetchMock.mock.calls[1]![0]).toContain("/issues/15/labels");
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body).labels).toEqual(["content-request"]);
+  });
+
+  it("says so where an operator can see it when the label cannot be attached", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    fetchMock.mockResolvedValueOnce(respond({ number: 16, html_url: "https://github.com/i/16", labels: [] }, 201));
+    fetchMock.mockResolvedValueOnce(respond({ message: "Forbidden" }, 403));
+
+    const filed = await fileRequest(ACCESS, { text: "A workshops section", who: { name: "B", email: "b@e" } });
+    /* The owner's words are filed — that is not in question and never was. */
+    expect(filed.number).toBe(16);
+    expect(filed.labelled).toBe(false);
+    expect(logged.mock.calls[0]?.[0]).toContain("#16");
+    expect(logged.mock.calls[0]?.[0]).toContain("content-request");
+    expect(logged.mock.calls[0]?.[0]).toContain("403");
+    logged.mockRestore();
   });
 
   it("refuses an empty request and one longer than the box can send", async () => {

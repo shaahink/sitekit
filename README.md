@@ -146,6 +146,15 @@ integrations: [
 move: an injected route follows the site's own `build.format`, so a site on
 `"file"` still serves `/edit.html`.
 
+It also touches that one page's CSP after the build, and only that page: Astro
+writes the build's style hashes into `style-src-elem`, and a hash in a directive
+makes `'unsafe-inline'` **ignored** — which is the source Google's sign-in script
+needs for the stylesheet it injects. Those hashes belong to other pages (the
+editor page has no inline style of its own), so they are dropped from that one
+directive and the build log says so. Measured on all six sites before it was
+written: five of them were degraded, silently. If the page ever does carry an
+inline style, nothing is rewritten and the build warns instead.
+
 `checkAnnotations` reads the built pages back in `astro:build:done` and fails
 the build on a `data-sk-edit` that would not save — a path resolving to nothing
 in the content, a path with no field in the form model, the same path twice on
@@ -257,9 +266,23 @@ of the last release.
 there, and `tsc` only ever adds, so a moved file used to ship forever.
 
 Behaviours that look like oversights are deliberate and pinned by tests: the
-honeypot succeeds quietly, a 422 on issue creation retries without labels, a
-failed screenshot upload never loses the comment, and the rate limiter sweeps
-its whole map above 500 addresses.
+honeypot succeeds quietly, a 422 on issue creation retries without labels — kept
+since 0.16.0 as insurance rather than a guard, because measurement says GitHub
+creates the label as it files the issue and the failure that *does* happen is a
+silently dropped label, which is now read back and reported — a failed
+screenshot upload never loses the comment, and the rate limiter sweeps its whole
+map above 500 addresses.
+
+`?preview=<field path>` on the content edge, added at 0.16.0, answers with the
+bytes of the photograph one image field points at. It exists because a stored
+`src` is only a URL on a site whose pictures live in `public/`: where
+`astro:assets` owns them the content names a path into the repository that
+nothing serves, so the picker drew a broken-image hairline instead of the
+photograph an owner was about to replace. The panel asks the browser first and
+falls back to this once, and only for the value that came from the file. Nothing
+is declared per site, and no path is ever taken from the caller — the handler
+reads the field's own value out of the content, so the reachable set is exactly
+the pictures the panel is showing.
 
 The owner's home (`?home` on the content edge) adds three: every block is
 **settled independently**, so a dead analytics instance costs the traffic

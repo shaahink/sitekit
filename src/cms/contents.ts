@@ -113,15 +113,64 @@ export async function writeFile(
     one error message an owner can actually act on. */
 export class ConflictError extends Error {}
 
+/** A file's bytes rather than its text, for the picker's preview of a
+    photograph no server serves (preview.ts). Null when it isn't there, which
+    is an ordinary answer here: the first path tried is a guess between two
+    spellings.
+
+    Two calls in the worst case, and the second one is not optional. The
+    contents API stops returning content somewhere around a megabyte and hands
+    back `encoding: "none"` with the blob's sha instead — which is exactly the
+    size range a photograph in a repository lives in, so treating that as
+    "missing" would have made this work only for small pictures. The blobs API
+    takes the sha and answers base64 up to 100 MB. */
+export async function readBinary(path: string, access: RepoAccess): Promise<FileBytes | null> {
+  const query = access.branch ? `?ref=${encodeURIComponent(access.branch)}` : "";
+  const result = await gh(`/repos/${access.repo}/contents/${encodePath(path)}${query}`, {
+    token: access.token,
+    userAgent: access.userAgent
+  });
+  if (result.status === 404) return null;
+  if (!result.ok) throw new Error(`read ${path}: ${result.status} ${result.text}`);
+  if (result.data?.type !== "file") throw new Error(`read ${path}: not a file`);
+
+  const sha = result.data.sha as string;
+  if (result.data.encoding === "base64" && typeof result.data.content === "string" && result.data.content) {
+    return { bytes: decodeBase64(result.data.content), sha };
+  }
+
+  const blob = await gh(`/repos/${access.repo}/git/blobs/${sha}`, {
+    token: access.token,
+    userAgent: access.userAgent
+  });
+  if (!blob.ok || typeof blob.data?.content !== "string") {
+    throw new Error(`read blob ${path}: ${blob.status} ${blob.text}`);
+  }
+  return { bytes: decodeBase64(blob.data.content), sha };
+}
+
+export interface FileBytes {
+  /** Named concretely so the buffer satisfies `BodyInit` without a cast. */
+  bytes: Uint8Array<ArrayBuffer>;
+  sha: string;
+}
+
 function encodePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
-function decodeUtf8Base64(value: string): string {
+function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
+  /* GitHub wraps its base64 at 60 characters; `atob` is specified to skip
+     whitespace but the payload is stripped anyway, because a decoder that
+     depends on forgiveness is a decoder that fails on a different runtime. */
   const binary = atob(value.replace(/\s+/g, ""));
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return bytes;
+}
+
+function decodeUtf8Base64(value: string): string {
+  return new TextDecoder().decode(decodeBase64(value));
 }
 
 function encodeUtf8Base64(text: string): string {

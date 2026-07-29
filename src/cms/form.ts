@@ -116,7 +116,9 @@ function pictureAt(node: Node, prefix: string, root: Node): ImageField | null {
   const declared = Object.keys(properties).find(
     (key) => deref(properties[key] as Node, root).format === "image"
   );
-  const source = declared ?? (has("src", "string") && has("w", "integer") && has("h", "integer") ? "src" : null);
+  const shaped =
+    has("src", "string") && has("w", "integer") && has("h", "integer") && !moving(properties, root);
+  const source = declared ?? (shaped ? "src" : null);
   if (!source) return null;
 
   return {
@@ -128,6 +130,31 @@ function pictureAt(node: Node, prefix: string, root: Node): ImageField | null {
     ...(has("h", "integer") ? { heightPath: at("h") } : {}),
     ...(has("alt", "string") ? { altPath: at("alt") } : {})
   };
+}
+
+/* The one thing shaped like a photograph that must never get a picker.
+   ---------------------------------------------------------------------------
+   `src` beside `w` and `h` is also how this fleet spells a *film* — elfine's
+   `zand.video` is exactly that shape, down to the integer pixel sizes the
+   layout holds space with. A photo control on an mp4 is the worst of the
+   image bugs, because it does not merely look wrong: choosing a picture there
+   writes a JPEG into the one element that cannot play it, and the page loses
+   its film to a still.
+
+   Her schema worked around it by omitting the field, which is a site paying
+   for something the kit got wrong. So the kit reads the two signals that are
+   the schema saying so rather than a key being guessed at.
+
+   A `poster` string beside the source is the giveaway: a poster is the still
+   frame *for* something that moves, and nothing that is itself a photograph
+   has one. And a source that states its own `format` has already named what
+   it is — `"image"` is the opt-in above, so any other value is an opt-out,
+   which is the escape hatch for a moving picture with no poster to show. */
+function moving(properties: Record<string, Node>, root: Node): boolean {
+  const source = properties.src ? deref(properties.src, root) : undefined;
+  if (source?.format && source.format !== "image") return true;
+  const poster = properties.poster;
+  return Boolean(poster) && typeName(deref(poster as Node, root)) === "string";
 }
 
 function walk(

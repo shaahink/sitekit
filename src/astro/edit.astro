@@ -69,7 +69,16 @@ if (csp) {
      2026-07-28. Google Identity Services does load a stylesheet into this
      document, and 'unsafe-inline' never covered it: a host is not inline, and
      CSP ignores 'unsafe-inline' the moment a hash is present, which Astro's
-     own stylesheet hashes guarantee. The origin has to be named. */
+     own stylesheet hashes guarantee. The origin has to be named.
+
+     And the second line is not redundant with it, which is what 0.16.0
+     corrected here: GIS *also* injects a 9.7 kB <style> element at runtime, so
+     'unsafe-inline' is load-bearing rather than belt-and-braces — and on a site
+     whose build contributes hashes to this directive it was being ignored, in
+     silence, exactly as the sentence above says it would be. Measured on
+     sk-works against elfine, same kit, three hashes against none. Those hashes
+     belong to other pages and the fix is in style-policy.ts, because nothing
+     visible from inside a single page's frontmatter can see them. */
   csp.insertStyleResource({ resource: "'self'", kind: "element" });
   csp.insertStyleResource({ resource: "'unsafe-inline'", kind: "element" });
   csp.insertStyleResource({ resource: "https://accounts.google.com", kind: "element" });

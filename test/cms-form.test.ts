@@ -134,6 +134,64 @@ describe("formModel", () => {
     expect(model.find((field) => field.path === "src")?.kind).toBe("text");
   });
 
+  /* A film is `src` beside `w` and `h` too — elfine's `zand.video`, spelled
+     here as her schema spells it. Offering a photo control there is the one
+     image bug that destroys content instead of looking wrong: it writes a JPEG
+     into the element that cannot play it. Her schema had to omit the field to
+     get out of the way, which is a site working around the kit. */
+  it("does not read a film as a photograph", () => {
+    const model = formModel(
+      z.object({
+        video: z.object({
+          ariaLabel: z.string(),
+          poster: z.string(),
+          src: z.string(),
+          w: z.number().int().positive(),
+          h: z.number().int().positive(),
+          figcaption: z.string()
+        })
+      })
+    );
+    const video = model.find((field) => field.path === "video");
+    if (video?.kind !== "group") throw new Error("expected a group");
+    expect(video.fields.find((field) => field.path === "video.src")?.kind).toBe("text");
+    expect(video.fields.some((field) => field.kind === "image")).toBe(false);
+  });
+
+  /* The escape hatch, for a moving picture with no poster to show. `"image"`
+     is the opt-in, so any other stated format is the opt-out. */
+  it("takes an explicit format that is not an image as a refusal", () => {
+    const model = formModel(
+      z.object({
+        clip: z.object({
+          src: z.string().meta({ format: "video" }),
+          w: z.number().int(),
+          h: z.number().int()
+        })
+      })
+    );
+    const clip = model.find((field) => field.path === "clip");
+    if (clip?.kind !== "group") throw new Error("expected a group");
+    expect(clip.fields.some((field) => field.kind === "image")).toBe(false);
+  });
+
+  /* And a still that happens to sit beside a poster is still a still: an
+     explicit `format: "image"` outranks the shape either way. */
+  it("keeps an explicitly declared image beside a poster", () => {
+    const model = formModel(
+      z.object({
+        card: z.object({
+          poster: z.string(),
+          file: z.string().meta({ format: "image" }),
+          alt: z.string()
+        })
+      })
+    );
+    const card = model.find((field) => field.path === "card");
+    if (card?.kind !== "group") throw new Error("expected a group");
+    expect(card.fields.find((field) => field.path === "card.file")?.kind).toBe("image");
+  });
+
   /* The escape hatch for a schema that spells a picture some other way. */
   it("takes an explicit format instead of the convention", () => {
     const model = formModel(

@@ -53,6 +53,8 @@
 export { checkAnnotations } from "./annotations.js";
 export type { AnnotationCheckOptions, AnnotationProblem } from "./annotations.js";
 
+import { settleStylePolicy } from "./style-policy.js";
+
 /* Astro is a peer, not a dependency: the kit is installed by six sites that
    all have their own copy, and pulling a second one in to typecheck four
    property reads would be the tail wagging the dog. The surface used here is
@@ -79,6 +81,11 @@ interface SetupHook {
   config: ResolvedConfig;
   injectRoute: (route: { pattern: string; entrypoint: string; prerender?: boolean }) => void;
   updateConfig: (config: Record<string, unknown>) => void;
+}
+
+interface BuildDoneHook {
+  dir: URL;
+  logger: { info: (message: string) => void; warn: (message: string) => void };
 }
 
 export interface EditorRouteOptions {
@@ -145,6 +152,14 @@ export function editorRoute(options: EditorRouteOptions) {
             ]
           }
         });
+      },
+
+      /* The one thing about this page's policy that cannot be decided while
+         the config is being read, because it depends on hashes the build has
+         not computed yet. See style-policy.ts — measured fleet-wide before
+         writing it, and five of the six sites needed it. */
+      "astro:build:done": ({ dir, logger }: BuildDoneHook) => {
+        settleStylePolicy(dir, logger);
       }
     }
   };
