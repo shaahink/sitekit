@@ -1,4 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>shaahink/renovate-config"]
+  "extends": ["github>shaahink/renovate-config"],
+  "packageRules": [
+    {
+      "description": "Undo the fleet preset's typescript <7 cap. That cap exists because astro check has no TypeScript 7 API; the kit never calls astro check — it compiles with plain tsc and already runs 7. Remove when the preset's cap goes.",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": ">=6.0.0"
+    }
+  ]
 }
