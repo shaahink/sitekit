@@ -21,13 +21,14 @@
    The bins have the same problem for the same reason: `sitekit-headers` reads
    a site's config from its cwd and writes a file the site commits, and nothing
    a unit test can call proves that. So the proof runs it against the template
-   too and expects vercel.json not to move.
+   too and expects vercel.json not to move. `sitekit-normalize` joined it at
+   0.16.0 on the same terms and expects `src/content` not to move.
 
    Run it by hand before a release — `npm run proof`. Deliberately not part of
    `prepublishOnly`: publishing happens from CI through the npm Trusted
    Publisher, where there is no sibling checkout to build. */
 
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,10 +112,48 @@ try {
   writeFileSync(vercelJsonPath, committed);
 }
 
-const failed = code !== 0 || headers !== 0;
+/* `sitekit-normalize` is the same shape one gate along: CI runs it and then
+   `git diff --exit-code -- src/content`, so the proof is that a site whose
+   content is at the fixed point comes out of a run untouched. Every file is
+   read before and compared after rather than trusting the command's own count,
+   and any file it did move is put back — the same promise the vercel.json half
+   makes, and it matters more here because content is somebody's words. */
+const contentRoot = join(site, "src", "content");
+function contentFiles(dir, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) contentFiles(path, out);
+    else if (/\.ya?ml$/.test(entry.name)) out.push(path);
+  }
+  return out;
+}
+
+const before = new Map(contentFiles(contentRoot).map((path) => [path, readFileSync(path)]));
+let normalize = 1;
+try {
+  const run = spawnSync(process.execPath, [join(kit, "bin", "normalize.mjs")], {
+    cwd: site,
+    stdio: "inherit",
+    shell: false
+  });
+  const moved = [...before].filter(([path, bytes]) => !readFileSync(path).equals(bytes));
+  if (run.status !== 0) normalize = run.status ?? 1;
+  else if (moved.length) {
+    console.error(
+      `sitekit-normalize rewrote ${moved.length} content file(s) — the site's committed ` +
+        "content is not at the normalizer's fixed point, so its CI would fail:\n" +
+        moved.map(([path]) => `  ${path}`).join("\n")
+    );
+    normalize = 1;
+  } else normalize = 0;
+} finally {
+  for (const [path, bytes] of before) writeFileSync(path, bytes);
+}
+
+const failed = code !== 0 || headers !== 0 || normalize !== 0;
 console.log(
   failed
     ? "\nproof: FAILED"
-    : "\nproof: the site builds against this kit, and sitekit-headers reproduces its vercel.json"
+    : "\nproof: the site builds against this kit, and sitekit-headers and sitekit-normalize both reproduce what it has committed"
 );
 process.exit(failed ? 1 : 0);

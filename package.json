@@ -17,7 +17,8 @@
   ],
   "bin": {
     "sitekit-editor-css": "./bin/editor-css.mjs",
-    "sitekit-headers": "./bin/headers.mjs"
+    "sitekit-headers": "./bin/headers.mjs",
+    "sitekit-normalize": "./bin/normalize.mjs"
   },
   "sideEffects": false,
   "publishConfig": {

@@ -106,6 +106,30 @@ it and diffs. A per-site copy script would have meant editing four repos the
 day the asset moved inside `dist`, which is exactly the boundary this lift
 exists to get right.
 
+### The three commands a site runs
+
+```
+sitekit-headers [--cloudflare [dir]]   # vercel.json, and Cloudflare's three
+sitekit-normalize [directory]          # default src/content
+sitekit-editor-css [destination]       # default public/editor-panel.css
+```
+
+A site's `package.json` names them `headers`, `content` and `editor`, and its
+CI runs each and diffs — regenerate, then `git diff --exit-code`. All three
+replaced per-site scripts, and the pattern is the same each time: the *emitting*
+is the kit's, the *input* stays the site's. `headers.config.mjs` is a site's own
+because what it sends is content; the content files are obviously a site's own;
+the editor stylesheet has no site input at all, which is why that one is a copy.
+
+`sitekit-normalize` arrived at 0.16.0, replacing six copies of
+`scripts/normalize-content.mjs` that were still byte-identical — the cheap
+moment to move something rather than the late one, `emit-headers` having reached
+four variants by hash before it went. One thing did have to change: the per-site
+script resolved `../src/content` from its own location and then undid Node's URL
+pathname on Windows by hand, because a drive letter comes back behind a leading
+slash. A command runs from the site root, so the path is `resolve(cwd, …)` and
+the workaround left with the copies.
+
 ### What a site's `astro.config.mjs` says
 
 ```js
