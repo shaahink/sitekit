@@ -38,7 +38,10 @@ export interface Change {
       the trailer. See handler.ts's commitMessage. */
   who?: string;
   at: string;
-  url: string;
+  /** The commit on github.com — omitted when the reader could not open it. A
+      private repository's links are "Page not found" for an owner who has a
+      Google account and no GitHub one, so `ownerHome` strips them. */
+  url?: string;
 }
 
 export interface DeployState {

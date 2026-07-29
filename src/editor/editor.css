@@ -577,8 +577,10 @@ body {
 .sk-editor__page { color: var(--sk-editor-dim); font-size: 0.92rem; }
 
 .sk-editor__changewhen,
+.sk-editor__changewho,
 .sk-editor__changetext { font-size: 0.92rem; }
-.sk-editor__changewhen { color: var(--sk-editor-muted); }
+.sk-editor__changewhen,
+.sk-editor__changewho { color: var(--sk-editor-muted); }
 
 .sk-editor__deploy {
   margin: 0 0 0.6rem;
@@ -610,6 +612,18 @@ body {
   justify-items: start;
   inline-size: 100%;
   margin-block-start: 0.5rem;
+  /* The save bar is sticky at the block end, so an element scrolled flush to
+     the bottom of the viewport lands *behind* it. This is the bar's own height
+     — 44px button plus its padding — asked for as clearance, so the browser
+     stops with Send above it rather than under it. Both surfaces the browser
+     pass measured were this one bug. */
+  scroll-margin-block-end: 5.5rem;
 }
 
 .sk-editor__requestform .sk-editor__textarea { inline-size: 100%; }
+
+/* `inline-size: 100%` above resolves against this wrapper, which is a flex item
+   sized to its content — so the open form was 344px wide inside a 640px panel,
+   with the share link beside it rather than under it. Only while the form is
+   open: closed, the link keeps its place on the actions line. */
+.sk-editor__request:has(form) { flex: 1 0 100%; }

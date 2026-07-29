@@ -3,7 +3,7 @@ import { clearStatsTokenCache, ownerTraffic, websitePages } from "../src/analyti
 import { contentPaths, ownerHome, statsCredential } from "../src/cms/home.js";
 import { deployState, recentChanges } from "../src/cms/history.js";
 import { fileRequest, MAX_REQUEST, RequestError } from "../src/cms/requests.js";
-import { relative } from "../src/editor/home.js";
+import { changeAuthor, relative, trafficChange } from "../src/editor/home.js";
 import { defaultStrings } from "../src/editor/strings.js";
 
 const ACCESS = { repo: "shaahink/behrooz-website", token: "t", userAgent: "test" };
@@ -102,6 +102,54 @@ describe("websitePages", () => {
     });
     expect(fetchMock.mock.calls[1]![0]).toContain("type=path");
     expect(fetchMock.mock.calls[1]![0]).not.toContain("type=url");
+  });
+
+  /* 09.6 finding 5, from Elfine's real list: "/ — 4 views", "/fr/ — 1 view",
+     "/index.html — 1 view". Production serves both spellings with a 200 and no
+     redirect, so Umami counts them apart and an owner had to add two rows
+     together to count their own home page. */
+  it("counts / and /index.html as the one page they are", async () => {
+    fetchMock.mockResolvedValueOnce(respond({ token: "t1" }));
+    fetchMock.mockResolvedValueOnce(
+      respond([
+        { x: "/", y: 4 },
+        { x: "/fr/", y: 1 },
+        { x: "/index.html", y: 1 },
+        { x: "/fr/index.html", y: 2 }
+      ])
+    );
+    const pages = await websitePages(
+      { baseUrl: "https://stats.example", username: "u", password: "p" },
+      "w1",
+      { startAt: 1, endAt: 2 }
+    );
+    /* Merged before the sort, so the merge decides the ranking: /fr/ is second
+       on three views rather than third on one. */
+    expect(pages).toEqual([
+      { path: "/", views: 5 },
+      { path: "/fr/", views: 3 }
+    ]);
+  });
+
+  it("leaves a page that only looks like an index alone", async () => {
+    /* A file-format site's pages are real, separate pages — "/about.html" is
+       not a spelling of anything, and neither is "/notindex.html". */
+    fetchMock.mockResolvedValueOnce(respond({ token: "t1" }));
+    fetchMock.mockResolvedValueOnce(
+      respond([
+        { x: "/about.html", y: 3 },
+        { x: "/notindex.html", y: 2 }
+      ])
+    );
+    const pages = await websitePages(
+      { baseUrl: "https://stats.example", username: "u", password: "p" },
+      "w1",
+      { startAt: 1, endAt: 2 }
+    );
+    expect(pages).toEqual([
+      { path: "/about.html", views: 3 },
+      { path: "/notindex.html", views: 2 }
+    ]);
   });
 
   it("names the columns, sorts by reads and keeps the top three", async () => {
@@ -291,33 +339,81 @@ describe("deployState", () => {
 });
 
 describe("ownerHome", () => {
+  const COLLECTIONS = { a: { schema: null as never, dir: "src/content/pages" } };
+
+  /* Routed by URL rather than by call order. `ownerHome` fires its requests
+     concurrently and the order changed the day it learned to ask whether the
+     repository is public — a fixture that depends on the sequence is a fixture
+     that breaks on the next question the panel asks. Both real APIs answer by
+     URL, so this is also the more honest mock. */
+  function answering(options: { private?: boolean; repoStatus?: number } = {}) {
+    fetchMock.mockImplementation((input: unknown) => {
+      const url = String(input);
+      if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
+        return Promise.resolve(
+          respond({ full_name: "shaahink/behrooz-website", private: options.private ?? true }, options.repoStatus ?? 200)
+        );
+      }
+      if (url.includes("/status")) return Promise.resolve(respond({ state: "success", statuses: [] }));
+      if (url.includes("/commits")) return Promise.resolve(respond([OWNER_COMMIT]));
+      if (url.endsWith("/api/auth/login")) return Promise.resolve(respond({ token: "t1" }));
+      if (/\/api\/websites\/w1$/.test(url)) {
+        return Promise.resolve(
+          respond({ id: "w1", name: "bez", domain: "bez-website.vercel.app", shareId: "5a749940fb2c3369" })
+        );
+      }
+      return Promise.resolve(respond({ pageviews: 26, visitors: 5 }));
+    });
+  }
+
   it("keeps the change list when there is no analytics credential at all", async () => {
-    fetchMock.mockResolvedValueOnce(respond([OWNER_COMMIT]));
-    fetchMock.mockResolvedValueOnce(respond({ state: "success", statuses: [] }));
-    const home = await ownerHome(ACCESS, { a: { schema: null as never, dir: "src/content/pages" } }, {});
+    answering();
+    const home = await ownerHome(ACCESS, COLLECTIONS, {});
     expect(home.changes).toHaveLength(1);
     expect(home.traffic).toBeUndefined();
     expect(home.shareUrl).toBeUndefined();
   });
 
   it("builds the share link from the instance's own shareId rather than from config", async () => {
-    fetchMock.mockResolvedValueOnce(respond([OWNER_COMMIT])); // commits
-    fetchMock.mockResolvedValueOnce(respond({ token: "t1" })); // umami login
-    fetchMock.mockResolvedValueOnce(
-      respond({ id: "w1", name: "bez", domain: "bez-website.vercel.app", shareId: "5a749940fb2c3369" })
-    );
-    fetchMock.mockImplementation(() => Promise.resolve(respond({ pageviews: 26, visitors: 5 })));
-
-    const home = await ownerHome(
-      ACCESS,
-      { a: { schema: null as never, dir: "src/content/pages" } },
-      UMAMI,
-      { umamiWebsiteId: "w1", now: 1_000_000_000_000 }
-    );
+    answering();
+    const home = await ownerHome(ACCESS, COLLECTIONS, UMAMI, {
+      umamiWebsiteId: "w1",
+      now: 1_000_000_000_000
+    });
     /* The exact URL SHAHIN.md #5 recorded for Bruce, derived rather than held. */
     expect(home.shareUrl).toBe(
       "https://stats.example/share/5a749940fb2c3369/bez-website.vercel.app"
     );
+  });
+
+  /* 09.6 finding 3. Every client repository is private and the owner signed in
+     with Google, so "See exactly what changed" was a GitHub 404 — five times a
+     panel, on the one promise an owner is most nervous about. */
+  it("strips the commit links on a private repository", async () => {
+    answering({ private: true });
+    const home = await ownerHome(ACCESS, COLLECTIONS, {});
+    expect(home.changes).toHaveLength(1);
+    expect(home.changes[0]?.url).toBeUndefined();
+    /* The change itself is still there — this removes a dead link, not a row. */
+    expect(home.changes[0]?.summary).toBe("Changed 2 things on home");
+    expect(home.linkable).toBe(false);
+  });
+
+  it("keeps them on a public one, where they open for anybody", async () => {
+    answering({ private: false });
+    const home = await ownerHome(ACCESS, COLLECTIONS, {});
+    expect(home.changes[0]?.url).toBe("https://github.com/shaahink/shade-site/commit/4ba488c");
+    expect(home.linkable).toBe(true);
+  });
+
+  it("treats a repository it could not ask about as not linkable", async () => {
+    /* Failing closed: a missing link costs a curious owner nothing, and a dead
+       one spends the trust this panel exists to build. */
+    answering({ repoStatus: 502 });
+    const home = await ownerHome(ACCESS, COLLECTIONS, {});
+    expect(home.changes).toHaveLength(1);
+    expect(home.changes[0]?.url).toBeUndefined();
+    expect(home.linkable).toBe(false);
   });
 });
 
@@ -377,5 +473,50 @@ describe("relative", () => {
 
   it("says nothing rather than 'Invalid Date' when the date is missing", () => {
     expect(relative("", defaultStrings, now)).toBe("");
+  });
+});
+
+/* 09.6 finding 1. The panel printed "+43% on the {days} days before" to an
+   owner, because the call site filled `percent` and not `days`. Nothing caught
+   it: `visitorChange` is null until a site has a previous period with visitors
+   in it, so every site in the fleet still reads "new" and the hole would have
+   appeared on the day somebody's traffic arrived. */
+describe("trafficChange", () => {
+  const window = (days: number, visitorChange: number | null) => ({
+    days,
+    current: { visitors: 12, pageviews: 30 },
+    visitorChange
+  });
+
+  it("fills every placeholder in the sentence", () => {
+    expect(trafficChange(window(7, 43), defaultStrings)).toBe("+43% on the 7 days before");
+    expect(trafficChange(window(30, -12), defaultStrings)).toBe("-12% on the 30 days before");
+  });
+
+  it("leaves no template hole for any window, whatever the string says", () => {
+    /* The assertion that generalises: a site may override these strings, and
+       what must never reach an owner is a brace. */
+    for (const days of [7, 30, 90]) {
+      for (const change of [0, 5, -100, 1200]) {
+        expect(trafficChange(window(days, change), defaultStrings)).not.toContain("{");
+      }
+    }
+  });
+});
+
+/* 09.6 finding 4. `who` has been in the payload since 0.13.0 and the panel never
+   rendered it, so a list filtered by content path read as the owner's own edits
+   — bez's whole list was ours, in developer prose, under "What you changed". */
+describe("changeAuthor", () => {
+  it("names the person the editor recorded", () => {
+    expect(changeAuthor({ who: "Shade Azarnoosh" }, defaultStrings)).toBe("by Shade Azarnoosh");
+  });
+
+  it("says a commit without editor attribution was ours", () => {
+    expect(changeAuthor({}, defaultStrings)).toBe("by sk");
+  });
+
+  it("no longer titles the block as if every row were the reader's", () => {
+    expect(defaultStrings.homeChangesTitle).toBe("What changed");
   });
 });

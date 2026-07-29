@@ -162,7 +162,9 @@ export interface EditorStrings {
   homeTrafficTitle: string;
   /** `{visitors}` `{views}` `{days}` — already pluralised by the caller. */
   homeTrafficLine: string;
-  /** `{percent}` — carries its own sign. */
+  /** `{percent}` — carries its own sign — and `{days}`, the window it is
+      against. Both are required: a missing key leaves its own braces in the
+      sentence, which is what an owner read for half of 0.14.0's life. */
   homeTrafficChange: string;
   homeTrafficNone: string;
   homePagesTitle: string;
@@ -173,6 +175,11 @@ export interface EditorStrings {
   homeChangesTitle: string;
   homeChangesNone: string;
   homeChangeDetail: string;
+  /** `{who}` — the person the editor recorded on the commit. */
+  homeChangeBy: string;
+  /** For a commit with no editor attribution, which means it was not an owner's
+      edit at all. */
+  homeChangeByUs: string;
   homeDeployLive: string;
   homeDeployBuilding: string;
   /** `{reason}` — the host's own words, which beat anything written here. */
@@ -323,9 +330,19 @@ export const defaultStrings: EditorStrings = {
   homePageLine: "{path} — {views}",
   homeShareLink: "See all your visitor numbers",
 
-  homeChangesTitle: "What you changed",
+  /* Not "What you changed". The list is filtered by content path and not by
+     author, so it carries our commits too — the browser pass found Elfine's
+     newest row saying "Stop Elfine's site telling people not to work with her",
+     which she did not write and did not do. Every row says whose it was now, and
+     the heading no longer claims they are all the reader's. */
+  homeChangesTitle: "What changed",
   homeChangesNone: "Nothing changed yet. Pick a page below and try something — you can always put it back.",
   homeChangeDetail: "See exactly what changed",
+  homeChangeBy: "by {who}",
+  /* A commit the editor did not write is one of ours. Saying "by sk" is both
+     true and the thing that makes the row make sense to somebody who is sure
+     they never touched it. */
+  homeChangeByUs: "by sk",
   homeDeployLive: "Your last change is on the site.",
   homeDeployBuilding: "Your last change is going up now — give it a minute, then reload your site.",
   /* The host's own sentence, quoted. "Deployment rate limited — retry in 24

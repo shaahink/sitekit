@@ -17,7 +17,7 @@
 
 import { ownerTraffic, type OwnerTraffic } from "../analytics/stats.js";
 import { deployState, recentChanges, type Change, type DeployState } from "./history.js";
-import type { RepoAccess } from "./contents.js";
+import { repoIsPublic, type RepoAccess } from "./contents.js";
 import type { CmsEnv, CollectionConfig } from "./types.js";
 
 export interface OwnerHome {
@@ -33,6 +33,17 @@ export interface OwnerHome {
       the instance's own `shareId` rather than configured, so it cannot go
       stale against a regenerated link. */
   shareUrl?: string;
+  /** Whether a github.com link works for whoever is reading this panel. False
+      on every private repository, which is all four client sites — the editor
+      uses it to decide whether to offer a link to a filed request. */
+  linkable: boolean;
+}
+
+/* A change with no link left on it. The panel guards on the url being present,
+   so this is how a link stops being offered. */
+function withoutUrl(change: Change): Change {
+  const { url: _url, ...rest } = change;
+  return rest;
 }
 
 /** Every content path the collections cover — what "the owner's changes" means
@@ -71,7 +82,7 @@ export async function ownerHome(
   /* Settled, not awaited together: GitHub being slow must not cost the traffic
      block and an unwell analytics instance must not cost the change list. They
      are two different questions and they fail separately. */
-  const [changesResult, trafficResult] = await Promise.allSettled([
+  const [changesResult, trafficResult, publicResult] = await Promise.allSettled([
     recentChanges(access, contentPaths(collections), 5),
     stats
       ? ownerTraffic(
@@ -79,13 +90,21 @@ export async function ownerHome(
           stats.websiteId,
           { days: [7, 30], ...(options.now === undefined ? {} : { now: options.now }) }
         )
-      : Promise.resolve(undefined)
+      : Promise.resolve(undefined),
+    repoIsPublic(access)
   ]);
 
-  const changes = changesResult.status === "fulfilled" ? changesResult.value : [];
   const traffic = trafficResult.status === "fulfilled" ? trafficResult.value : undefined;
+  /* A commit link the owner cannot open is worse than no link: "See exactly
+     what changed" is the promise they are most nervous about, and on every
+     private repo in the fleet it answered "Page not found". The panel guards on
+     the url being there, so removing it removes the link — see repoIsPublic. */
+  const linkable = publicResult.status === "fulfilled" && publicResult.value;
+  const changes = (changesResult.status === "fulfilled" ? changesResult.value : []).map(
+    (change) => (linkable ? change : withoutUrl(change))
+  );
 
-  const home: OwnerHome = { changes };
+  const home: OwnerHome = { changes, linkable };
 
   const newest = changes[0];
   if (newest) {

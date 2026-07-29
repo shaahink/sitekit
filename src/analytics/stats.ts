@@ -284,11 +284,33 @@ export async function websitePages(
     `/api/websites/${websiteId}/metrics?type=path&startAt=${range.startAt}&endAt=${range.endAt}`
   )) as Array<{ x?: string; y?: number }>;
 
-  return rows
-    .filter((row) => typeof row.x === "string")
-    .map((row) => ({ path: row.x as string, views: row.y ?? 0 }))
+  /* Merged before sorting, because two rows that are one page must be one row
+     before anything decides which three are the most read. */
+  const views = new Map<string, number>();
+  for (const row of rows) {
+    if (typeof row.x !== "string") continue;
+    const path = canonicalPath(row.x);
+    views.set(path, (views.get(path) ?? 0) + (row.y ?? 0));
+  }
+
+  return [...views]
+    .map(([path, count]) => ({ path, views: count }))
     .sort((a, b) => b.views - a.views)
     .slice(0, limit);
+}
+
+/* "/" and "/index.html" are one page, and production serves both with a 200
+   and no redirect, so Umami records them apart: Elfine's list read "/ — 4
+   views", "/fr/ — 1 view", "/index.html — 1 view", and an owner counting their
+   home page had to know to add two rows together. Only index.html collapses —
+   on a file-format site "/about.html" is a page of its own.
+
+   Trailing slashes are deliberately left alone. "/fr" and "/fr/" are also one
+   page on these sites, but collapsing them means guessing which spelling a
+   site serves, and guessing wrong merges two rows that a file-format site
+   really does keep apart. This fixes what was measured. */
+function canonicalPath(path: string): string {
+  return path.replace(/(^|\/)index\.html$/, "$1") || "/";
 }
 
 export interface OwnerTraffic {

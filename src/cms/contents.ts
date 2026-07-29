@@ -23,6 +23,27 @@ export interface FileContents {
   sha: string;
 }
 
+/** Whether a link to github.com works for somebody who is not signed in there.
+    ---------------------------------------------------------------------------
+    The owner has a Google account, not a GitHub one, and is not a collaborator
+    on their own site's repository. So on a private repo every github.com link
+    the panel emits is a "Page not found" for the person it is shown to — which
+    is what the 09.6 browser pass measured, five times per panel on "See exactly
+    what changed" and once more on the issue a request had just filed.
+
+    Public is the whole predicate: a public repo's commits and issues read
+    anonymously, so the link is good for everyone. Failure answers *not* public,
+    because a missing link costs a curious owner nothing and a dead one spends
+    the trust the panel exists to build. */
+export async function repoIsPublic(access: RepoAccess): Promise<boolean> {
+  const result = await gh(`/repos/${access.repo}`, {
+    token: access.token,
+    userAgent: access.userAgent
+  });
+  if (!result.ok || typeof result.data?.private !== "boolean") return false;
+  return result.data.private === false;
+}
+
 /** The file, or null if it isn't there. */
 export async function readFile(path: string, access: RepoAccess): Promise<FileContents | null> {
   const query = access.branch ? `?ref=${encodeURIComponent(access.branch)}` : "";

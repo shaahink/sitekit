@@ -45,7 +45,9 @@ export interface HomeChange {
   summary?: string;
   who?: string;
   at: string;
-  url: string;
+  /** Absent when the handler decided the reader could not open it — see
+      `linkable`. */
+  url?: string;
 }
 
 export interface HomeDeploy {
@@ -62,6 +64,11 @@ export interface HomeData {
     pages?: Array<{ path: string; views: number }>;
   };
   shareUrl?: string;
+  /** Whether a github.com link works for whoever is reading this. False on a
+      private repository, where every such link is a "Page not found" for an
+      owner who signed in with Google. Absent counts as false: an offer that
+      might be a dead end is not worth making. */
+  linkable?: boolean;
 }
 
 /* Remembered per browser rather than per account. The alternative is another
@@ -100,12 +107,18 @@ export function home(options: HomeOptions): { element: HTMLElement; setData: (da
   const blocks = el("div", "sk-editor__blocks");
   const actions = el("p", "sk-editor__homeactions");
 
+  /* Read at the moment a request is filed rather than when the button is built,
+     because the panel is drawn before the data arrives and the answer comes
+     with the data. Unknown stays false. */
+  let linkable = false;
+
   element.append(welcome, help, blocks, actions);
-  actions.append(requestButton(strings, options.onRequest));
+  actions.append(requestButton(strings, options.onRequest, () => linkable));
 
   return {
     element,
     setData: (data) => {
+      linkable = data.linkable === true;
       blocks.textContent = "";
       const traffic = trafficBlock(strings, data);
       if (traffic) blocks.append(traffic);
@@ -189,7 +202,7 @@ function trafficBlock(strings: EditorStrings, data: HomeData): HTMLElement | nul
       const node = el(
         "span",
         `sk-editor__change sk-editor__change--${change >= 0 ? "up" : "down"}`,
-        fill(strings.homeTrafficChange, { percent: `${change >= 0 ? "+" : ""}${change}` })
+        trafficChange(window, strings)
       );
       item.append(node);
     }
@@ -217,6 +230,22 @@ function trafficBlock(strings: EditorStrings, data: HomeData): HTMLElement | nul
   }
 
   return block;
+}
+
+/** "+43% on the 7 days before". Its own function because it is the panel's one
+    computed sentence, and because the call that built it inline shipped without
+    `days` — `fill` leaves an absent key as it found it, on purpose, so a
+    half-translated string still reads as a template, and the owner read
+    "+43% on the {days} days before". Nothing showed it: `visitorChange` is null
+    until a site has a previous period with visitors in it, so the fleet's every
+    site reads "new" and the hole appears on the day traffic arrives. Anything
+    with a placeholder in it is now testable without a browser. */
+export function trafficChange(window: HomeWindow, strings: EditorStrings): string {
+  const change = window.visitorChange ?? 0;
+  return fill(strings.homeTrafficChange, {
+    percent: `${change >= 0 ? "+" : ""}${change}`,
+    days: String(window.days)
+  });
 }
 
 /* --- what I changed, and did it go live --------------------------------- */
@@ -258,6 +287,7 @@ function changesBlock(strings: EditorStrings, data: HomeData): HTMLElement | nul
     const when = el("time", "sk-editor__changewhen", relative(change.at, strings));
     if (change.at) when.dateTime = change.at;
     item.append(when);
+    item.append(el("span", "sk-editor__changewho", changeAuthor(change, strings)));
     if (change.url) item.append(link(change.url, strings.homeChangeDetail));
     list.append(item);
   }
@@ -265,11 +295,22 @@ function changesBlock(strings: EditorStrings, data: HomeData): HTMLElement | nul
   return block;
 }
 
+/** Whose change this was. The payload has carried it since 0.13.0 and the panel
+    never showed it, so a list filtered by content path read as a list of the
+    owner's own edits — bez's whole list was ours, in developer prose. `who` is
+    the account the editor recorded in the commit body; a commit without one was
+    not made through the editor, and that is worth saying rather than leaving
+    blank. */
+export function changeAuthor(change: { who?: string }, strings: EditorStrings): string {
+  return change.who ? fill(strings.homeChangeBy, { who: change.who }) : strings.homeChangeByUs;
+}
+
 /* --- ask for something bigger ------------------------------------------- */
 
 function requestButton(
   strings: EditorStrings,
-  onRequest: (text: string) => Promise<string>
+  onRequest: (text: string) => Promise<string>,
+  linkable: () => boolean
 ): HTMLElement {
   const wrap = el("span", "sk-editor__request");
   const open = el("button", "sk-editor__link", strings.homeRequestOpen);
@@ -295,6 +336,13 @@ function requestButton(
     form.append(el("p", "sk-editor__label", strings.homeRequestTitle), area, note, send, cancel);
     wrap.append(form);
     area.focus();
+    /* Focusing scrolls the *textarea* into view at best, and the browser pass
+       measured what that leaves: on a phone Send was 115px below the fold, and
+       on desktop it was on screen but underneath the sticky save bar — a click
+       at the centre of Send hit `.sk-editor__note`. So the form asks for its
+       own end to be shown, and the CSS gives it the bar's height as
+       scroll-margin. Nobody taps a button they cannot see. */
+    form.scrollIntoView?.({ block: "end", behavior: "smooth" });
 
     const close = (): void => {
       form.remove();
@@ -313,7 +361,10 @@ function requestButton(
           form.textContent = "";
           const thanks = el("p", "sk-editor__note", strings.homeRequestSent);
           form.append(thanks);
-          if (url) form.append(link(url, strings.homeRequestSeeIt));
+          /* "Follow it here" pointed at an issue on a private repository, which
+             is a GitHub 404 for an owner with a Google account. Offered only
+             where it opens; "Sent. You'll hear back." stands on its own. */
+          if (url && linkable()) form.append(link(url, strings.homeRequestSeeIt));
           open.hidden = false;
         })
         .catch((error: Error) => {
