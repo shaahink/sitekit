@@ -192,4 +192,22 @@ describe("the JWKS cache", () => {
     await verifyIdToken(token, { ...options(), now: NOW + 7201 * 1000, leewaySeconds: 99999 });
     expect(fetches).toBe(2);
   });
+
+  /* Session 16's F4. This call is on the sign-in path, so a hang here is an
+     owner tapping Google's button and getting nothing back at all. The deadline
+     is handed to whatever `fetchImpl` was supplied, because a Worker that
+     brings its own fetch still wants one. */
+  it("gives the JWKS fetch a deadline, through a supplied fetchImpl", async () => {
+    let seen: RequestInit | undefined;
+    const recording = (async (_url: unknown, init?: RequestInit) => {
+      seen = init;
+      return new Response(JSON.stringify({ keys: served }), {
+        headers: { "content-type": "application/json" }
+      });
+    }) as unknown as typeof fetch;
+
+    await verifyIdToken(await sign(claims()), { ...options(), fetchImpl: recording });
+    expect(seen?.signal).toBeInstanceOf(AbortSignal);
+    expect(seen?.signal?.aborted).toBe(false);
+  });
 });

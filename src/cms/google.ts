@@ -13,6 +13,7 @@
    detail: telling an attacker *which* check failed is free intelligence. */
 
 import { base64UrlDecode, decodeJwtJson } from "../internal/base64url.js";
+import { deadline, JWKS_TIMEOUT_MS } from "../internal/upstream.js";
 
 const DEFAULT_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 
@@ -146,7 +147,12 @@ async function jwks(
   if (!force && cache && cache.url === url && now < cache.expiresAt) return cache.keys;
 
   const doFetch = fetchImpl ?? fetch;
-  const response = await doFetch(url);
+  /* Google's certificate endpoint, on the sign-in path: a hang here is an owner
+     tapping Google's button and getting nothing back. Passed to whatever
+     `fetchImpl` is, because a caller that supplied one still wants the
+     deadline — see internal/upstream.ts. */
+  const signal = deadline(JWKS_TIMEOUT_MS);
+  const response = await doFetch(url, signal ? { signal } : {});
   if (!response.ok) throw new Error(`JWKS fetch: ${response.status}`);
   const body = (await response.json()) as { keys?: JsonWebKey[] };
   if (!body.keys?.length) throw new Error("JWKS response has no keys");

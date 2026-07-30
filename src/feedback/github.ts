@@ -1,3 +1,5 @@
+import { deadline, githubTimeout } from "../internal/upstream.js";
+
 const API = "https://api.github.com";
 
 export interface GhOptions {
@@ -5,6 +7,11 @@ export interface GhOptions {
   userAgent: string;
   method?: string;
   body?: unknown;
+  /** Override the deadline. 0 removes it. See internal/upstream.ts — every
+      call through here has one by default, and it defaults higher for a write
+      than for a read because only one of the two is ambiguous when it is cut
+      off. */
+  timeoutMs?: number;
 }
 
 export interface GhResult {
@@ -17,8 +24,10 @@ export interface GhResult {
 
 export async function gh(path: string, options: GhOptions): Promise<GhResult> {
   const { token, userAgent, method = "GET", body } = options;
+  const signal = deadline(githubTimeout(method, options.timeoutMs));
   const response = await fetch(API + path, {
     method,
+    ...(signal ? { signal } : {}),
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",

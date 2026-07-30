@@ -45,6 +45,8 @@
    enumeration, and an owner's home carries three variables where the fleet
    dashboard carries four. */
 
+import { deadline, STATS_TIMEOUT_MS } from "../internal/upstream.js";
+
 /** Where the instance is and who is reading it. */
 export interface StatsCredential {
   /** Instance origin, no trailing slash — "https://sk-stats.vercel.app". */
@@ -60,6 +62,11 @@ export interface StatsCredential {
       missing; nothing else needs it. */
   teamId?: string;
   userAgent?: string;
+  /** Override the deadline on every call to the instance; 0 removes it. An
+      instance that accepts a connection and never answers is the failure this
+      exists for — see internal/upstream.ts, and drill 5 of session 16, where
+      one cost the owner's home every block it has. */
+  timeoutMs?: number;
 }
 
 /** A website as the instance describes it. `shareId` is the public link that
@@ -148,8 +155,10 @@ function mint(credential: StatsCredential, key: string): Promise<string> {
 }
 
 async function login(credential: StatsCredential, key: string): Promise<string> {
+  const signal = deadline(credential.timeoutMs ?? STATS_TIMEOUT_MS);
   const response = await fetch(`${credential.baseUrl}/api/auth/login`, {
     method: "POST",
+    ...(signal ? { signal } : {}),
     headers: {
       "Content-Type": "application/json",
       "User-Agent": credential.userAgent || DEFAULT_USER_AGENT
@@ -179,13 +188,18 @@ export function clearStatsTokenCache(): void {
    fail rather than loop. */
 async function read(credential: StatsCredential, path: string): Promise<any> {
   const key = `${credential.baseUrl}/${credential.username}`;
-  const attempt = async (token: string) =>
-    fetch(`${credential.baseUrl}${path}`, {
+  /* A signal per attempt, not one shared between them: a retry after a 401 is
+     a second request and would inherit an already-elapsed deadline. */
+  const attempt = async (token: string) => {
+    const signal = deadline(credential.timeoutMs ?? STATS_TIMEOUT_MS);
+    return fetch(`${credential.baseUrl}${path}`, {
+      ...(signal ? { signal } : {}),
       headers: {
         Authorization: `Bearer ${token}`,
         "User-Agent": credential.userAgent || DEFAULT_USER_AGENT
       }
     });
+  };
 
   let response = await attempt(await statsToken(credential));
   if (response.status === 401) {

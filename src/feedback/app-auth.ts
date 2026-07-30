@@ -12,6 +12,7 @@
    runtime conversion would drag in a dependency. */
 
 import { base64UrlEncode, base64UrlJson } from "../internal/base64url.js";
+import { deadline, GITHUB_TIMEOUT_MS } from "../internal/upstream.js";
 
 export interface AppAuthOptions {
   appId: string;
@@ -19,6 +20,10 @@ export interface AppAuthOptions {
   privateKey: string;
   installationId: string;
   userAgent: string;
+  /** Override the deadline; 0 removes it. This mint precedes every other call
+      the handler makes, so a hang here costs the whole invocation rather than
+      one block of it. */
+  timeoutMs?: number;
 }
 
 interface CachedToken {
@@ -40,10 +45,12 @@ export async function installationToken(options: AppAuthOptions): Promise<string
   if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token;
 
   const jwt = await appJwt(options.appId, options.privateKey);
+  const signal = deadline(options.timeoutMs ?? GITHUB_TIMEOUT_MS);
   const response = await fetch(
     `https://api.github.com/app/installations/${options.installationId}/access_tokens`,
     {
       method: "POST",
+      ...(signal ? { signal } : {}),
       headers: {
         Authorization: `Bearer ${jwt}`,
         Accept: "application/vnd.github+json",
