@@ -1,0 +1,45 @@
+# The gate that was missing.
+#
+# Until this file, `release.yml` was the only workflow in this repository: a
+# commit to `main` ran no build and no tests, and the suite first executed
+# inside `prepublishOnly` when somebody pushed a tag. Six repositories pin this
+# package, so a broken commit on `main` was invisible until the moment it was
+# being published — the one moment when finding out is most expensive.
+#
+# Measured in drydock's sessions/16-engineering-review.md (finding F9), which
+# also found two client-facing bugs in code no automated gate has ever looked
+# at between releases.
+#
+# `npm run proof` is deliberately not here. It builds a real site against this
+# working copy, which needs a sibling checkout — see scripts/prove.mjs, and
+# F10, which measured that a second `actions/checkout` of the public
+# site-template would make one. That is a slower job and its own decision; this
+# one is the plain gate, and the plain gate should exist first.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The kit compiles with plain `tsc` and never calls `astro check`, which
+      # is why it runs TypeScript 7 while every site in the fleet is pinned to
+      # 6.0.3 — see the reasoning beside WATCHED in sk-studio/api/fleet.ts. The
+      # build is four tsc passes plus the asset copy, so it is the type check.
+      - run: npm run build
+
+      - run: npm test
