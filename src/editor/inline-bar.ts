@@ -46,7 +46,13 @@ export interface BarHome {
 
 export interface NoteAction {
   label: string;
-  run(): void;
+  run(): void | Promise<unknown>;
+  /** What the button says once `run` has finished — the widget's `copy`/`copied`
+      pair, which is the only feedback a copy to the clipboard has. Left unset
+      the button keeps its label, which is right for everything that navigates
+      or takes the note down. A rejection leaves the label alone: an action that
+      failed has not happened, and saying it did is worse than saying nothing. */
+  done?: string;
 }
 
 /** Save, and how much of it there is.
@@ -417,7 +423,21 @@ export class Bar {
     else delete this.note.dataset.tone;
 
     for (const action of options.actions ?? []) {
-      this.note.append(" ", button("btn--quiet", action.label, action.run));
+      const control: HTMLButtonElement = button("btn--quiet", action.label, () => {
+        const running = action.run();
+        if (!action.done) return;
+        void Promise.resolve(running).then(
+          () => {
+            control.textContent = action.done ?? action.label;
+          },
+          () => {
+            /* Then the caller has already said so its own way — `copyMine`
+               falls back to a prompt, which puts the text in front of the owner
+               without this button claiming anything. */
+          }
+        );
+      });
+      this.note.append(" ", control);
     }
     if (options.link) {
       const anchor = document.createElement("a");

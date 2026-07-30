@@ -13,7 +13,15 @@
 import { describe, expect, it } from "vitest";
 import type { Field } from "../src/cms/fields.js";
 import { Dirty } from "../src/editor/dirty.js";
-import { coerce, fieldId, plural, retarget, valueAt } from "../src/editor/values.js";
+import {
+  coerce,
+  draftText,
+  emptyRequired,
+  fieldId,
+  plural,
+  retarget,
+  valueAt
+} from "../src/editor/values.js";
 import { defaultStrings, fill } from "../src/editor/strings.js";
 
 const text = (path: string): Field => ({
@@ -205,6 +213,126 @@ describe("Dirty", () => {
     /* Untracked now, so any value reads as a change rather than as equal to a
        stale original from the previous file. */
     expect(dirty.update("hero.cue", "Enter", "Enter")).toBe(true);
+  });
+
+  /* `touched` is `has` plus the one case `has` cannot see, and F8's guard is
+     built on the difference: a row an owner added this minute is theirs, and
+     `clearUnder` has taken its scalars out of `changes` because the array
+     travels whole. */
+  it("counts a field inside a list the owner reshaped as touched", () => {
+    const dirty = new Dirty();
+    dirty.trackList("slides", [{ alt: "One" }]);
+    dirty.track("slides[0].alt", "One");
+    expect(dirty.touched("slides[0].alt")).toBe(false);
+
+    dirty.updateList("slides", [{ alt: "One" }, { alt: "" }]);
+    expect(dirty.has("slides[1].alt")).toBe(false);
+    expect(dirty.touched("slides[1].alt")).toBe(true);
+    /* And a path that merely starts with the same letters is not inside it. */
+    expect(dirty.touched("slideshow.alt")).toBe(false);
+  });
+});
+
+/* --- what a required field being empty means (§2.6, F8) ------------------ */
+
+describe("emptyRequired", () => {
+  const model: Field[] = [
+    {
+      kind: "group",
+      path: "hero",
+      label: "Hero",
+      required: true,
+      fields: [
+        text("hero.tagline"),
+        { ...text("hero.note"), required: false },
+        { kind: "boolean", path: "hero.visible", label: "Visible", required: true },
+        { kind: "number", path: "hero.columns", label: "Columns", required: true, integer: true },
+        { kind: "image", path: "hero.photo", label: "Photo", required: true, altPath: "hero.photoAlt" }
+      ]
+    }
+  ];
+
+  it("names a required string that is empty and leaves the rest alone", () => {
+    expect(
+      emptyRequired(model, {
+        hero: { tagline: "", note: "", visible: false, columns: 2, photo: "/a.jpg" }
+      })
+    ).toEqual(["hero.tagline"]);
+  });
+
+  it("reads whitespace as empty, because a schema accepts it and a page shows nothing", () => {
+    expect(
+      emptyRequired(model, { hero: { tagline: "  ", visible: true, columns: 1, photo: "/a.jpg" } })
+    ).toContain("hero.tagline");
+  });
+
+  it("treats zero and false as answers", () => {
+    const empty = emptyRequired(model, {
+      hero: { tagline: "A line", visible: false, columns: 0, photo: "/a.jpg" }
+    });
+    expect(empty).toEqual([]);
+  });
+
+  it("says nothing about a photograph, which is the picker's question", () => {
+    /* An image's value can be a staged upload the server resolves, so emptiness
+       here would be a lie half the time — and `Uploads.missingAlt` already holds
+       Save for the half that matters. */
+    expect(
+      emptyRequired(model, { hero: { tagline: "A line", visible: true, columns: 1, photo: "" } })
+    ).toEqual([]);
+  });
+
+  it("misses nothing when a required number has been cleared", () => {
+    expect(
+      emptyRequired(model, {
+        hero: { tagline: "A line", visible: true, columns: null, photo: "/a.jpg" }
+      })
+    ).toEqual(["hero.columns"]);
+  });
+
+  it("asks each row of a list in its own right", () => {
+    const list: Field[] = [
+      {
+        kind: "array",
+        path: "slides",
+        label: "Slides",
+        required: true,
+        item: {
+          kind: "group",
+          path: "slides[]",
+          label: "Slide",
+          required: true,
+          fields: [text("slides[].alt")]
+        }
+      }
+    ];
+    expect(emptyRequired(list, { slides: [{ alt: "One" }, { alt: "" }, { alt: "Three" }] })).toEqual([
+      "slides[1].alt"
+    ]);
+    /* An empty list is a real state — a gallery with nothing in it yet. */
+    expect(emptyRequired(list, { slides: [] })).toEqual([]);
+    expect(emptyRequired(list, {})).toEqual([]);
+  });
+});
+
+/* --- the words a conflict offers to keep (§2.6, F7) ---------------------- */
+
+describe("draftText", () => {
+  const model = [text("hero.tagline"), { ...text("hero.note"), label: "Note" }];
+
+  it("writes each change under the field's own label, and where it was", () => {
+    expect(
+      draftText(model, [{ path: "hero.tagline", value: "A new line" }], "https://example.com/")
+    ).toBe("hero.tagline:\nA new line\n\n— https://example.com/");
+  });
+
+  it("falls back to the path when the model has no such field", () => {
+    expect(draftText(model, [{ path: "gone.away", value: "Words" }], "/")).toContain("gone.away:");
+  });
+
+  it("writes a whole reordered list rather than leaving it out", () => {
+    const out = draftText(model, [{ path: "slides", value: [{ alt: "One" }] }], "/");
+    expect(out).toContain('[{"alt":"One"}]');
   });
 });
 

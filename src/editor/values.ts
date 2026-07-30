@@ -213,6 +213,78 @@ export function savablePaths(fields: Field[]): Set<string> {
   return out;
 }
 
+/** Which required fields are empty right now, as concrete paths.
+    -------------------------------------------------------------------------
+    §2.6's F8. `required` has been on every descriptor since the model existed
+    (`cms/fields.ts`), and nothing read it: a schema's `z.string()` is required
+    *and* accepts `""`, so an owner could clear their own page's heading and the
+    server would commit the emptiness without a word. The panel is where that is
+    asked, exactly as `imageNeedsAlt` is — the content edge validates against the
+    same schema the build does, and weakening it to insist on non-empty strings
+    would change what the site accepts rather than what the editor offers.
+
+    Three kinds are deliberately not asked about. A boolean's `false` is an
+    answer. A group and an array are containers, and an empty list is a real
+    state — a gallery with nothing in it yet. And an image is the picker's
+    question rather than this one: its value can be a staged upload the server
+    resolves, so an emptiness here would be a lie half the time, and
+    `Uploads.missingAlt` already holds Save for the half that matters.
+
+    Array rows are expanded against `values` through `retarget`, the same way
+    `render` draws them, so a row an owner added this minute is asked about in
+    its own right rather than through the template it came from. */
+export function emptyRequired(fields: Field[], values: unknown): string[] {
+  const out: string[] = [];
+  const walk = (field: Field): void => {
+    if (field.kind === "group") {
+      for (const child of field.fields) walk(child);
+      return;
+    }
+    if (field.kind === "array") {
+      const rows = valueAt(values, field.path);
+      if (!Array.isArray(rows)) return;
+      for (const [index] of rows.entries()) {
+        walk(retarget(field.item, `${field.path}[]`, `${field.path}[${index}]`));
+      }
+      return;
+    }
+    if (field.kind === "boolean" || field.kind === "image") return;
+    if (!field.required) return;
+    const value = valueAt(values, field.path);
+    /* `0` and `false` are values; only nothing is nothing. A string of spaces
+       is nothing too — it satisfies a schema and reads as a blank heading. */
+    if (value === null || value === undefined || (typeof value === "string" && !value.trim())) {
+      out.push(field.path);
+    }
+  };
+  for (const field of fields) walk(field);
+  return out;
+}
+
+/** The owner's unsaved words, as text they can paste somewhere.
+    -------------------------------------------------------------------------
+    §2.6's F7. A conflict is the one failure whose only safe ending is a reload,
+    and a reload drops everything typed since the page opened — so the note that
+    offers it has to offer *keeping the words* first. This is what goes on the
+    clipboard: each change under the field's own human label, because a path
+    means nothing to the person reading it later, and the page's own address at
+    the end for the same reason the review widget puts it there.
+
+    Labels come from the model rather than from either surface, so the bar and
+    the panel copy the same text for the same edit. A value that is not a string
+    — a whole reordered list — is written as JSON: unlovely, and better than
+    silently leaving an owner's work out of the thing that promised to keep it. */
+export function draftText(fields: Field[], edits: Array<{ path: string; value: unknown }>, where: string): string {
+  const parts: string[] = [];
+  for (const edit of edits) {
+    const label = findField(fields, edit.path)?.label ?? edit.path;
+    const text = typeof edit.value === "string" ? edit.value : JSON.stringify(edit.value);
+    parts.push(`${label}:\n${text}`);
+  }
+  parts.push(`— ${where}`);
+  return parts.join("\n\n");
+}
+
 export function findField(fields: Field[], path: string): Field | undefined {
   const wanted = templateOf(path);
   for (const field of fields) {

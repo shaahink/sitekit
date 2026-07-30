@@ -78,3 +78,36 @@ describe("editorRoute", () => {
     );
   });
 });
+
+/* Bug #19. The page hardcoded `/favicon.svg` from 0.11.0, which is right on the
+   sites that happen to ship that filename and a 404 in the owner's own console on
+   the ones that don't. Real directories rather than a mocked `existsSync`,
+   because the thing being tested is what the filesystem says. */
+describe("the icon the editor page links", () => {
+  /* A file URL, which is what Astro's resolved config carries. Built with `new
+     URL` rather than from a path, because `import.meta.url` is already one and
+     round-tripping it through a string loses the drive letter on Windows. */
+  const publicDir = (name: string) => new URL(`fixtures/icons/${name}/`, import.meta.url);
+
+  it("names the file a site actually ships", () => {
+    expect(setup({ publicDir: publicDir("icon-svg") }).loaded.icon).toEqual({
+      href: "/icon.svg",
+      type: "image/svg+xml"
+    });
+  });
+
+  it("prefers favicon.svg where a site ships both, so nothing about bez moves", () => {
+    expect(setup({ publicDir: publicDir("favicon-svg") }).loaded.icon).toEqual({
+      href: "/favicon.svg",
+      type: "image/svg+xml"
+    });
+  });
+
+  it("links nothing at all rather than guessing", () => {
+    /* And that is deliberately not the same as dropping the link everywhere: a
+       document with no icon link makes the browser ask for /favicon.ico, so
+       dropping it unconditionally would have turned one site's 404 into six. */
+    expect(setup({ publicDir: publicDir("none") }).loaded.icon).toBeNull();
+    expect(setup({}).loaded.icon).toBeNull();
+  });
+});

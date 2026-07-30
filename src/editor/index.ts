@@ -24,7 +24,7 @@
 
 import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
-import { cssEscape, el, labelled, link, reveal } from "./dom.js";
+import { copyText, cssEscape, el, labelled, link, reveal } from "./dom.js";
 import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
 import { render, Uploads, type RenderContext } from "./render.js";
@@ -39,7 +39,7 @@ import {
   resolveEditorLang,
   type EditorStrings
 } from "./strings.js";
-import { plural } from "./values.js";
+import { draftText, emptyRequired, findField, plural } from "./values.js";
 
 export type { EditorStrings } from "./strings.js";
 export type { Field, SelectOption } from "../cms/fields.js";
@@ -142,6 +142,21 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
   const dirty = new Dirty();
   const uploads = new Uploads();
+
+  /* Bug #17: leaving with unsaved work said nothing at all on this surface.
+     `inline.ts` has had these three lines since 7.6, and the panel needs them
+     more rather than less — it has no draft on disk to come back to, and §2.9
+     leaves that gap open deliberately, because a restore cannot serialise a
+     photograph an owner had chosen. A staged photograph is covered too: the
+     picker writes its `upload:` token through `dirty`, so it counts.
+
+     Registered once and never removed: this panel lives as long as its document,
+     and `mountEditor` is called once per page. */
+  window.addEventListener("beforeunload", (event) => {
+    if (!dirty.size) return;
+    event.preventDefault();
+    event.returnValue = strings.inlineLeaveWarning;
+  });
 
   /* Where the owner was when they were sent here to sign in. Validated in
      return-to.ts: a site-relative path or nothing, because this ends up in
@@ -516,6 +531,11 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
        every time they typed anywhere else. The rule is about the moment a field
        *becomes* the reason Save will not go. */
     const shown = new Set<string>();
+    /* Whether the note is currently saying why Save will not go, so that when
+       the reason is dealt with the note can go back to naming the file. Read as a
+       flag rather than by comparing the note's text, because F8's sentence names
+       a field and so is not one string to compare against. */
+    let holding = false;
 
     const context: RenderContext = {
       strings,
@@ -532,15 +552,35 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
            this is the only place it is ever asked — and asking after the fact
            is asking never. */
         const undescribed = uploads.missingAlt(body.values);
-        save.disabled = dirty.size === 0 || undescribed.length > 0;
+        /* And a required field the owner has just emptied (§2.6, F8). The same
+           gap as the one above and for the same reason — `required` has been on
+           every descriptor since the model existed and nothing read it, while a
+           schema's `z.string()` is required *and* accepts `""` — so an owner
+           could clear their own heading and the commit would go through.
+
+           `dirty.touched` is what keeps this honest: only a field emptied in
+           this session holds Save. Guarding on emptiness alone would mean a
+           value that was already blank when the panel opened locks an owner out
+           of saving the typo fix they actually came for, in a field they have
+           never seen and may not be allowed to invent words for. */
+        const emptied = emptyRequired(body.fields, body.values).filter((path) => dirty.touched(path));
+        const wanted = [...undescribed, ...emptied];
+        save.disabled = dirty.size === 0 || wanted.length > 0;
         save.textContent = dirty.size
           ? fill(strings.saveCount, {
               count: plural(dirty.size, strings.change, strings.changes, digitsFor(lang))
             })
           : strings.save;
-        if (undescribed.length) {
-          note.textContent = strings.imageNeedsAlt;
-          for (const path of undescribed) {
+        for (const marked of form.querySelectorAll(".is-wanted")) marked.classList.remove("is-wanted");
+        if (wanted.length) {
+          /* A photograph first where there is one: it is the newer thing on the
+             page and the one an owner is least likely to guess at. */
+          note.textContent = undescribed.length
+            ? strings.imageNeedsAlt
+            : fill(strings.fieldNeeded, {
+                what: findField(body.fields, emptied[0] ?? "")?.label ?? (emptied[0] ?? "")
+              });
+          for (const path of wanted) {
             const field = form.querySelector<HTMLElement>(`[data-path="${cssEscape(path)}"]`);
             field?.classList.add("is-wanted");
             /* §2.4's first rule, and the one way the collapse could be worse
@@ -554,11 +594,9 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
           }
         } else {
           shown.clear();
-          for (const marked of form.querySelectorAll(".is-wanted")) marked.classList.remove("is-wanted");
-          if (note.textContent === strings.imageNeedsAlt) {
-            note.textContent = fill(strings.editingFile, { path: body.path });
-          }
+          if (holding) note.textContent = fill(strings.editingFile, { path: body.path });
         }
+        holding = wanted.length > 0;
       }
     };
 
@@ -591,6 +629,10 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
         form,
         save,
         note,
+        /* For the labels on the words a conflict offers to keep (F7). The model,
+           not the form, so the bar and the panel copy the same text for the same
+           edit. */
+        fields: body.fields,
         resting: fill(strings.editingFile, { path: body.path }),
         changed: context.changed
       }).then(
@@ -621,6 +663,9 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     form: HTMLElement;
     save: HTMLButtonElement;
     note: HTMLElement;
+    /** The entry's own field descriptors, for naming an edit in words an owner
+        recognises when the conflict note offers to keep them. */
+    fields: Field[];
     /** What the note says when nothing has gone wrong — restored after a
         failure the owner has since dealt with. */
     resting: string;
@@ -749,13 +794,48 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       return null;
     }
 
-    note.textContent = body.error ?? strings.saveFailed;
+    /* Someone else's commit landed first. Reload stays the only safe ending —
+       re-applying this form over their work is the one thing here that would
+       destroy content — but it is no longer the only thing offered (§2.6, F7).
+       Reloading drops everything typed since the panel opened, and this surface
+       has no draft on disk to reload into, so the way to keep the words goes
+       first and the sentence says what the other button costs. */
     if (response.status === 409) {
+      note.textContent = strings.conflict;
+      const mine = el("button", "sk-editor__link", strings.copyMine);
+      mine.type = "button";
+      mine.addEventListener("click", () => {
+        void copyText(draftText(args.fields, dirty.edits(), location.href), strings.copyMine).then(
+          () => {
+            mine.textContent = strings.copiedMine;
+          },
+          () => {
+            /* `copyText` has already put the text in a prompt, which is the
+               fallback where the clipboard is refused. Nothing to claim. */
+          }
+        );
+      });
       const again = el("button", "sk-editor__link", strings.reload);
       again.type = "button";
       again.addEventListener("click", () => location.reload());
-      note.append(" ", again);
+      note.append(" ", mine, " ", again);
+      return null;
     }
+
+    /* Refused rather than failed (§2.6, F6): a wrong origin, an account off the
+       allowlist, a collection that has been renamed. None will succeed on a
+       second press and none is the owner's to fix, which is a different sentence
+       from "couldn't save" — and until 0.17.0 both got that one, or got the
+       server's own untranslated "Bad origin." instead. The server's words are
+       kept where whoever is diagnosing will look, which is where this file
+       already sends an unexpected rejection. */
+    if (response.status < 500) {
+      console.warn(`sk-editor: save refused with ${response.status}:`, body.error ?? "(no message)");
+      note.textContent = strings.saveRefused;
+      return null;
+    }
+
+    note.textContent = body.error ?? strings.saveFailed;
     return null;
   }
 

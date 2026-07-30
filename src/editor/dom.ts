@@ -55,6 +55,28 @@ export function reveal(node: HTMLElement): void {
   }
 }
 
+/** Put text on the clipboard, and where the browser refuses, put it in front of
+    the owner instead.
+
+    Lifted from `widget/chrome.ts`'s `offerCopy`, which has been the fleet's
+    answer to "never swallow what was written" since the review widget shipped:
+    `navigator.clipboard` is absent without a secure context and can be refused
+    outright, and a `window.prompt` holding the text is still an owner who can
+    select it. Both surfaces of the editor call this from the conflict note
+    (§2.6, F7), so both offer the same thing in the same order.
+
+    Resolves only when the text really is on the clipboard, because the button's
+    "Copied" is bound to that promise and a label claiming something that did not
+    happen is worse than no label. */
+export async function copyText(text: string, promptLabel: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    window.prompt(promptLabel, text);
+    throw new Error("clipboard refused");
+  }
+}
+
 /** CSS.escape where it exists, and enough of it where it doesn't: the only
     place this is used builds an attribute selector, so quotes and backslashes
     are the whole risk. */

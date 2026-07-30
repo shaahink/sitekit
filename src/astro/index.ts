@@ -53,6 +53,9 @@
 export { checkAnnotations } from "./annotations.js";
 export type { AnnotationCheckOptions, AnnotationProblem } from "./annotations.js";
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { settleStylePolicy } from "./style-policy.js";
 
 /* Astro is a peer, not a dependency: the kit is installed by six sites that
@@ -65,7 +68,7 @@ import { settleStylePolicy } from "./style-policy.js";
 /** A source entry in `security.csp.styleDirective.resources`. */
 type StyleResource = string | { resource: string; kind?: "element" | "attribute" };
 
-/** Only the four properties this integration reads. */
+/** Only the properties this integration reads. */
 interface ResolvedConfig {
   security?: {
     csp?:
@@ -75,6 +78,9 @@ interface ResolvedConfig {
           styleDirective?: { resources?: StyleResource[] };
         };
   };
+  /** Where the site keeps the files it serves verbatim — read to find out which
+      icon this site actually ships. See `siteIcon`. */
+  publicDir?: URL;
 }
 
 interface SetupHook {
@@ -104,6 +110,48 @@ export interface EditorRouteConfig {
   /** True when the site does not already permit inline style attributes, and
       the route must therefore ask for them itself. */
   needsStyleAttr: boolean;
+  /** The icon this site actually ships, or null where it ships none of the ones
+      worth guessing at. See `siteIcon`. */
+  icon: { href: string; type: string } | null;
+}
+
+/* Which icon a site ships, read off the site rather than assumed.
+   ---------------------------------------------------------------------------
+   Bug #19, and it is the smallest possible example of why an injected route has
+   to ask. Since 0.11.0 this page has said
+   `<link rel="icon" href="/favicon.svg">` — the one line by which its output
+   differed from the hand-written pages it replaced — and the href was never
+   checked against what any site actually has. bez ships `favicon.svg` and is
+   clean; nimagiti ships `icon.svg`, so every load of his editor logged a 404 in
+   his own console. A per-site coin flip, harmless to function, and visible to
+   anyone who opens devtools on their own site.
+
+   Three ways out were on the table. `editorRoute({ icon })` would have made the
+   per-site wiring differ between sites, and §2.9 stakes the boundary on that
+   wiring being byte-identical everywhere. Dropping the link is worse than the
+   bug: a document with no icon link makes the browser ask for `/favicon.ico`,
+   which none of the six sites ships, so a 404 on one site would have become a
+   404 on all six. So the route reads `publicDir` — which it already has, because
+   it already reads the resolved config for the style policy — and names what is
+   there. Zero configuration, correct on every site, and a site that ships no
+   icon at all gets no link and no request.
+
+   The order is by preference, not by likelihood: an SVG scales, and `.ico` is
+   only here because a site made before the fleet existed might have one. */
+const ICONS: Array<{ file: string; type: string }> = [
+  { file: "favicon.svg", type: "image/svg+xml" },
+  { file: "icon.svg", type: "image/svg+xml" },
+  { file: "favicon.png", type: "image/png" },
+  { file: "favicon.ico", type: "image/x-icon" }
+];
+
+function siteIcon(publicDir: URL | undefined): EditorRouteConfig["icon"] {
+  if (!publicDir) return null;
+  const root = fileURLToPath(publicDir);
+  for (const { file, type } of ICONS) {
+    if (existsSync(join(root, file))) return { href: `/${file}`, type };
+  }
+  return null;
 }
 
 const VIRTUAL_ID = "virtual:sitekit-editor-route";
@@ -127,7 +175,8 @@ export function editorRoute(options: EditorRouteOptions) {
       "astro:config:setup": ({ config, injectRoute, updateConfig }: SetupHook) => {
         const resolved: EditorRouteConfig = {
           title: options.title,
-          needsStyleAttr: !declaresStyleAttr(config)
+          needsStyleAttr: !declaresStyleAttr(config),
+          icon: siteIcon(config.publicDir)
         };
 
         /* The page is a published .astro file; the site's own build compiles

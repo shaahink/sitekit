@@ -25,12 +25,13 @@
 
 import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
+import { copyText } from "./dom.js";
 import { clearDraft, draftKey, readDraft, saveDraft, type Draft } from "./drafts.js";
 import { Bar, type SaveState } from "./inline-bar.js";
 import { EDIT_PARAM, panelHref, signInHref, TOUR_PARAM, tourArmed } from "./return-to.js";
 import { digitsFor, dirFor, editorStrings, fill, type EditorStrings } from "./strings.js";
 import { Tour, tourStorage, type TourStep } from "./tour.js";
-import { coerce, findField, plural, valueAt } from "./values.js";
+import { coerce, draftText, findField, plural, valueAt } from "./values.js";
 
 export interface InlineOptions {
   /** The content edge. Default `/api/content`. */
@@ -630,7 +631,10 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     /* A phone photograph's worth of latency on a slow connection is exactly
        when an owner taps Save twice. The button is disabled below, but the
        flag is what makes a second call impossible rather than unlikely. */
-    if (saving || !dirty.size) return;
+    /* `emptied()` here as well as on the button, for the reason given below
+       about `saving`: the button being disabled makes a save unlikely, and a
+       guard here makes it impossible. */
+    if (saving || !dirty.size || emptied()) return;
     saving = true;
     bar.setSave(saveState(strings.saving, false));
     bar.clearNote();
@@ -645,7 +649,17 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       });
     } catch {
       saving = false;
-      bar.setNote(strings.saveFailed, { tone: "bad" });
+      /* Bug #14, and it was an asymmetry rather than an oversight: 0.16.1 gave
+         the panel `saveUnreachable` for exactly this — a save that never left
+         the browser — and left the bar saying "Couldn't save that change.", the
+         one sentence that string's own comment calls wrong for a request the
+         server never saw. The bar has the *better* claim to it of the two
+         surfaces: `persist()` has written a draft on every keystroke, so
+         "everything you typed is still here" is true here even across the reload
+         the sentence asks them not to need. Said again below for the same
+         reason the 401 branch does. */
+      persist();
+      bar.setNote(strings.saveUnreachable, { tone: "bad" });
       refresh();
       return;
     }
@@ -696,10 +710,24 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       return;
     }
 
+    /* Someone else's commit landed first, and the behaviour stays what it was:
+       replaying a draft over it is the one bug on this surface that would
+       destroy content, so Reload really is the way out. What changes is the
+       order of the offer (§2.6, F7). Reloading drops everything typed since the
+       page opened, and until 0.17.0 that was the *only* thing offered — so the
+       way to keep the words goes first, and the sentence now says plainly what
+       the other button costs. */
     if (response.status === 409) {
       bar.setNote(strings.conflict, {
         tone: "bad",
-        actions: [{ label: strings.reload, run: () => location.reload() }]
+        actions: [
+          {
+            label: strings.copyMine,
+            done: strings.copiedMine,
+            run: () => copyText(draftText(body.fields, dirty.edits(), location.href), strings.copyMine)
+          },
+          { label: strings.reload, run: () => location.reload() }
+        ]
       });
       refresh();
       return;
@@ -720,15 +748,64 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       return;
     }
 
+    /* Everything the site *refused* rather than failed at (§2.6, F6). Until
+       0.17.0 this line said "Couldn't save that change." to a 403 and a 500
+       alike, or handed the owner the server's own English — "Bad origin.",
+       "Unknown collection." — which is terse, untranslated, and says nothing
+       about what to do. A 4xx here is a wrong origin, an account off the
+       allowlist, a collection that has been renamed: none of them will succeed on
+       a second tap, and none of them is the owner's to fix. The server's words
+       are kept for whoever is diagnosing, in the one place a developer looks and
+       an owner never does — the same choice `index.ts` makes for an unexpected
+       rejection. */
+    if (response.status < 500) {
+      console.warn(`sk inline edit: save refused with ${response.status}:`, result.error ?? "(no message)");
+      bar.setNote(strings.saveRefused, { tone: "bad" });
+      refresh();
+      return;
+    }
+
+    /* The site's own trouble — a 5xx, or a status nothing above recognised.
+       Pressing Save again is a reasonable thing to do, so the sentence stays the
+       one that does not discourage it. */
     bar.setNote(result.error ?? strings.saveFailed, { tone: "bad" });
     refresh();
   }
 
   /* --- the bar's resting state ------------------------------------------ */
 
+  /** A required field the owner has just emptied, if there is one.
+      -----------------------------------------------------------------------
+      §2.6's F8 on this surface. It located the fix in the panel, beside
+      `uploads.missingAlt`, and this half was written on bug #14's lesson rather
+      than on that sentence: a defect present on both surfaces and fixed on one
+      is exactly the asymmetry #14 was. Emptying a heading in place is *easier*
+      than emptying it in a form — a long press and one tap on a phone — and the
+      server accepts `""` for a required `z.string()` either way.
+
+      Narrower than the panel's version on purpose: the bar only ever holds text
+      it has judged editable, so there is no model to walk and nothing to say
+      about a field this page does not show. Wider in one way — an owner standing
+      *in* the empty field is told why Save has gone, which is the moment the
+      question gets asked. */
+  function emptied(): string | null {
+    for (const [path, target] of editables) {
+      if (!target.field.required) continue;
+      if (!dirty.has(path)) continue;
+      if (!(target.element.textContent ?? "").trim()) return target.field.label;
+    }
+    return null;
+  }
+
   function refresh(): void {
     const count = dirty.size;
-    if (document.activeElement && (document.activeElement as HTMLElement).dataset?.skEdit) {
+    const needed = emptied();
+    if (needed) {
+      /* Ahead of the focused branch, and that is the whole point: an owner who
+         has just cleared a heading is standing in it, so "Changing Tagline" is
+         where the reason Save vanished would otherwise never be said. */
+      bar.setStatus(fill(strings.fieldNeeded, { what: needed }), needed);
+    } else if (document.activeElement && (document.activeElement as HTMLElement).dataset?.skEdit) {
       /* Focus owns the status line; leave it saying what is being changed. */
     } else if (count) {
       const phrase = plural(count, strings.change, strings.changes, digits);
@@ -750,7 +827,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     } else {
       bar.setStatus(strings.inlineIdle);
     }
-    bar.setSave(saveState(strings.save, count > 0 && !saving));
+    bar.setSave(saveState(strings.save, count > 0 && !saving && !needed));
   }
 
   /** Save as the bar needs it: the verb on the button, the count on its chip,

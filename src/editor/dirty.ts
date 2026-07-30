@@ -90,6 +90,23 @@ export class Dirty {
     return this.changes.has(path);
   }
 
+  /** Has the owner's own session made this path what it is?
+      -----------------------------------------------------------------------
+      Wider than `has` by exactly one case, and the case matters: a field inside
+      a row that was added, removed or moved is not in `changes` — `clearUnder`
+      drops those on a redraw and the array travels whole — yet a row an owner
+      added this minute is theirs in every sense.
+
+      F8 (§2.6) is the caller. A required field left empty is only worth holding
+      Save over if *this* session emptied it: a value that was already blank when
+      the panel opened is the site builder's oversight, and refusing to save
+      anything until an owner fills in a field they have never seen would lock
+      them out of fixing the typo they came for. So the guard asks this rather
+      than asking whether the field is empty. */
+  touched(path: string): boolean {
+    return this.changes.has(path) || this.supersededBy(path);
+  }
+
   /** What the owner would be told they are saving. A reordered gallery counts
       once, not once per row that moved and once per caption that came with
       it — "Save 14 changes" for one drag is a sentence that makes an owner

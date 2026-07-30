@@ -92,6 +92,10 @@ export interface EditorStrings {
   savedLink: string;
 
   loadFailed: string;
+  /** The site answered, and its trouble is its own: a 5xx, or a status nothing
+      here recognises. Pressing Save again is a reasonable thing to do, which is
+      what separates this from `saveRefused` — and until 0.17.0 this sentence
+      was said to a 403 and a 500 alike (§2.6, F6). */
   saveFailed: string;
   /** A save that never reached the site at all — a dropped connection, a phone
       that lost its signal mid-tap. Distinct from every other failure because
@@ -99,9 +103,32 @@ export interface EditorStrings {
       where the owner's words are and what not to do next. Measured: without
       this the button read "Saving…" and stayed disabled forever. */
   saveUnreachable: string;
+  /** A save the site *refused*: any 4xx that is not 401, 409 or a field-level
+      complaint — a wrong origin, an account off the allowlist, a collection
+      that no longer exists. Three things in one sentence, because they are the
+      three an owner needs: nothing is lost, trying again will not help, and
+      here is who to ask. The server's own words are English and terse ("Bad
+      origin."), so they go to the console for whoever is diagnosing rather than
+      at an owner reading Farsi. */
+  saveRefused: string;
   invalid: string;
   conflict: string;
   reload: string;
+  /** Beside Reload on a conflict, and *before* it: reloading is the only safe
+      way out and it drops what the owner typed, so the way to keep their words
+      has to be offered first. The widget's `copy`/`copied` pair is the
+      precedent — same idea, same fallback to `window.prompt` where the
+      clipboard is refused. */
+  copyMine: string;
+  /** The same button after one tap. */
+  copiedMine: string;
+  /** `{what}` — a required field the owner has just emptied. Holds Save the way
+      `imageNeedsAlt` does, and for the same reason: the schema defaults a
+      string to "" and will accept the commit happily, so this is the only place
+      it is ever asked. Said only of a field *this session* emptied — a value
+      that was already blank when the panel opened is not something to lock an
+      owner out of saving over. */
+  fieldNeeded: string;
   /** A save refused because the sign-in lapsed. Distinct from every other
       failure, because it is the only one where the owner's work is safe and
       the fix is one tap. */
@@ -192,6 +219,12 @@ export interface EditorStrings {
   inlineDraftRestore: string;
   inlineDraftDiscard: string;
   inlineDraftStale: string;
+  /** Both surfaces since 0.17.0, and it kept the `inline` prefix because
+      renaming a key a site may have overridden would cost more than the tidiness
+      is worth. Bug #17: the panel had no `beforeunload` guard at all, so typing
+      into the form and following a link lost the work in silence — the one
+      surface where that matters most, because the panel has no draft on disk to
+      come back to. */
   inlineLeaveWarning: string;
 
   /* --- the first run, on the owner's own page (§2.5) --------------------- */
@@ -339,9 +372,17 @@ export const defaultStrings: EditorStrings = {
   saveFailed: "Couldn't save that change.",
   saveUnreachable:
     "Couldn't reach the site to save that. Everything you typed is still here — check your connection and press Save again. Don't reload this page yet.",
+  saveRefused:
+    "The site wouldn't accept that change. Nothing you typed is lost, but pressing Save again won't help — " +
+    "send this page to whoever set your site up and they can tell you why.",
   invalid: "That change doesn't fit the content model.",
-  conflict: "Someone else edited this since you opened it — reload and try again.",
+  conflict:
+    "Someone else changed this page since you opened it. Copy your words first if you want to keep them — " +
+    "reloading brings in their version and drops yours.",
   reload: "Reload",
+  copyMine: "Copy my text",
+  copiedMine: "Copied",
+  fieldNeeded: "“{what}” can't be left empty — put something in it, and Save comes back.",
   /* Says the two things that matter in the order they matter: the work is
      safe, and this is not something they broke. */
   expired: "You were signed out while you were working. Nothing you typed is lost —",
@@ -538,9 +579,17 @@ const fr: EditorStrings = {
   saveFailed: "Impossible d’enregistrer cette modification.",
   saveUnreachable:
     "Impossible de joindre le site pour enregistrer. Tout ce que vous avez écrit est encore là — vérifiez votre connexion et appuyez de nouveau sur Enregistrer. Ne rechargez pas cette page pour l’instant.",
+  saveRefused:
+    "Le site a refusé cette modification. Rien de ce que vous avez écrit n’est perdu, mais appuyer de nouveau sur " +
+    "Enregistrer n’y changera rien — envoyez cette page à la personne qui a mis votre site en place, elle pourra vous dire pourquoi.",
   invalid: "Cette modification n’entre pas dans le modèle de contenu.",
-  conflict: "Quelqu’un d’autre a modifié ceci depuis que vous l’avez ouvert — rechargez et réessayez.",
+  conflict:
+    "Quelqu’un d’autre a modifié cette page depuis que vous l’avez ouverte. Copiez d’abord votre texte si vous voulez " +
+    "le garder — recharger reprend leur version et abandonne la vôtre.",
   reload: "Recharger",
+  copyMine: "Copier mon texte",
+  copiedMine: "Copié",
+  fieldNeeded: "« {what} » ne peut pas rester vide — écrivez quelque chose et Enregistrer revient.",
   /* Impersonal on purpose: "vous avez été déconnecté" has to agree with a
      person this kit knows nothing about, so the session is the subject. */
   expired: "Votre session s’est terminée pendant que vous travailliez. Rien de ce que vous avez écrit n’est perdu —",
@@ -722,9 +771,17 @@ const fa: EditorStrings = {
   saveFailed: "این تغییر ذخیره نشد.",
   saveUnreachable:
     "برای ذخیره به سایت نرسیدیم. هرچه نوشته‌ای همین‌جا هست — اتصالت را نگاه کن و دوباره ذخیره را بزن. فعلاً این صفحه را دوباره بارگذاری نکن.",
+  saveRefused:
+    "سایت این تغییر را نپذیرفت. هرچه نوشته‌ای از بین نرفته، اما دوباره زدن ذخیره فایده‌ای ندارد — " +
+    "این صفحه را برای کسی که سایتت را راه انداخته بفرست تا بگوید چرا.",
   invalid: "این تغییر با ساختار محتوا جور درنمی‌آید.",
-  conflict: "از وقتی این را باز کرده‌ای کس دیگری عوضش کرده — دوباره بارگذاری کن و باز امتحان کن.",
+  conflict:
+    "از وقتی این صفحه را باز کرده‌ای کس دیگری عوضش کرده. اگر می‌خواهی نوشته‌هایت بماند، اول کپی‌شان کن — " +
+    "بارگذاری دوباره نسخهٔ او را می‌آورد و نوشتهٔ تو را کنار می‌گذارد.",
   reload: "بارگذاری دوباره",
+  copyMine: "متن من را کپی کن",
+  copiedMine: "کپی شد",
+  fieldNeeded: "«{what}» نمی‌تواند خالی بماند — چیزی در آن بنویس تا ذخیره برگردد.",
   expired: "وسط کار از حساب بیرون آمدی. هیچ‌کدام از نوشته‌هایت از بین نرفته —",
   expiredLink: "دوباره وارد شو",
   openPage: "این صفحه را روی خود سایت ویرایش کن",

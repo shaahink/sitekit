@@ -117,7 +117,11 @@ if (csp) {
     <!-- Nothing here belongs in an index, and there is no public content on
          this page to find anyway. -->
     <meta name="robots" content="noindex, nofollow" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Whatever this site actually ships, found by the integration reading its
+         publicDir — see `siteIcon`. Until 0.17.0 this line was a hardcoded
+         /favicon.svg, which 404'd in the console of every owner whose site
+         happens to call the file something else (bug #19). -->
+    {config.icon && <link rel="icon" type={config.icon.type} href={config.icon.href} />}
     <link rel="stylesheet" href="/editor-panel.css" />
   </head>
 
