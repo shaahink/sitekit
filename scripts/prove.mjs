@@ -24,9 +24,18 @@
    too and expects vercel.json not to move. `sitekit-normalize` joined it at
    0.16.0 on the same terms and expects `src/content` not to move.
 
-   Run it by hand before a release — `npm run proof`. Deliberately not part of
-   `prepublishOnly`: publishing happens from CI through the npm Trusted
-   Publisher, where there is no sibling checkout to build. */
+   Run it by hand before a release — `npm run proof`.
+
+   **Amended 2026-07-30 (session 16, F10).** The reason given here used to be
+   that publishing happens from CI through the npm Trusted Publisher, "where
+   there is no sibling checkout to build". That has stopped being a reason: a
+   second `actions/checkout` makes one, `site-template` is public so it needs no
+   token, and F9 has since given the kit a `ci.yml` that could carry the job.
+   What is left is a cost rather than an obstacle — this installs and builds a
+   whole Astro site, and it wants care around the overlay-and-restore before it
+   runs unattended, which is why it is written into 0.17.0's scope instead.
+   Amended in place rather than left standing, because a comment whose reason has
+   quietly stopped being true is how a fleet stops questioning it. */
 
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
