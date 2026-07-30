@@ -24,7 +24,7 @@
 
 import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
-import { cssEscape, el, labelled, link } from "./dom.js";
+import { cssEscape, el, labelled, link, reveal } from "./dom.js";
 import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
 import { render, Uploads, type RenderContext } from "./render.js";
@@ -436,15 +436,14 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       it, not on a form to search.
 
       Ancestors are opened from the element outwards rather than at the top
-      level, so §2.4's collapse — which is the next step, and which makes this
-      matter far more than it does today — inherits this for free and a nested
-      collapse later needs nothing. */
+      level, so §2.4's collapse — which since 0.17.0 is what those ancestors
+      *are* — inherited this for free, and a nested collapse later needs
+      nothing. This is §2.4's third auto-open rule and it was built before the
+      thing it opens. */
   function revealField(form: HTMLElement, path: string): void {
     const target = form.querySelector<HTMLElement>(`[data-path="${cssEscape(path)}"]`);
     if (!target) return;
-    for (let node = target.parentElement; node; node = node.parentElement) {
-      if (node instanceof HTMLDetailsElement) node.open = true;
-    }
+    reveal(target);
     target.scrollIntoView({ block: "center" });
     /* Focused as well as scrolled to, because "which one did it mean?" is a
        question a caret answers and a scroll position does not. Guarded: a
@@ -500,6 +499,14 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     save.disabled = true;
     const note = el("p", "sk-editor__note", fill(strings.editingFile, { path: body.path }));
 
+    /* Which held fields have already been shown. §2.4's first rule opens the
+       section around a field that is holding Save, and `changed()` runs on every
+       keystroke — so without this, an owner who deliberately collapsed a section
+       with an undescribed photograph in it would have it reopened under them
+       every time they typed anywhere else. The rule is about the moment a field
+       *becomes* the reason Save will not go. */
+    const shown = new Set<string>();
+
     const context: RenderContext = {
       strings,
       dirty,
@@ -524,9 +531,19 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
         if (undescribed.length) {
           note.textContent = strings.imageNeedsAlt;
           for (const path of undescribed) {
-            form.querySelector<HTMLElement>(`[data-path="${cssEscape(path)}"]`)?.classList.add("is-wanted");
+            const field = form.querySelector<HTMLElement>(`[data-path="${cssEscape(path)}"]`);
+            field?.classList.add("is-wanted");
+            /* §2.4's first rule, and the one way the collapse could be worse
+               than the form it replaces: a Save that will not go, for a reason
+               shut inside a box. The note under the button says what is wanted;
+               this is what makes the field it names reachable. */
+            if (field && !shown.has(path)) {
+              shown.add(path);
+              reveal(field);
+            }
           }
         } else {
+          shown.clear();
           for (const marked of form.querySelectorAll(".is-wanted")) marked.classList.remove("is-wanted");
           if (note.textContent === strings.imageNeedsAlt) {
             note.textContent = fill(strings.editingFile, { path: body.path });
@@ -535,7 +552,12 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       }
     };
 
-    for (const field of body.fields) form.append(render(field, body.values, context));
+    /* `collapsed` is passed here and nowhere else, which is the whole of §2.4's
+       "only the top level": `render` recurses without it, so a list's rows and a
+       nested group keep the open box they have always had. */
+    for (const field of body.fields) {
+      form.append(render(field, body.values, context, { collapsed: true }));
+    }
     /* What file is open, the way to the other surface, and Save — in that
        order, so Save stays at the end of the row where a thumb already knows
        to find it (`justify-content: space-between`). All three on screen at
@@ -685,15 +707,35 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     }
 
     /* Field-level messages go next to the field they are about; anything else
-       goes under the button. */
+       goes under the button.
+
+       §2.4's second rule is here: a message beside a field is worth nothing if
+       the field is inside a collapsed section, so every one of them opens its
+       own, and the first takes the caret. The inline surface has always done
+       this — `editables.get(first.path)?.element.focus()` — and the panel said
+       "that change doesn't fit the content model" and left the owner to find
+       out where. */
     if (Array.isArray(body.issues) && body.issues.length) {
+      let first: HTMLElement | null = null;
       for (const issue of body.issues) {
-        const input = form.querySelector(`[data-path="${cssEscape(issue.path)}"]`);
+        const input = form.querySelector<HTMLElement>(`[data-path="${cssEscape(issue.path)}"]`);
         const message = el("p", "sk-editor__issue", issue.message);
         if (input?.parentElement) input.parentElement.append(message);
         else note.after(message);
+        if (input) {
+          reveal(input);
+          first ??= input;
+        }
       }
       note.textContent = strings.invalid;
+      if (first) {
+        first.scrollIntoView({ block: "center" });
+        try {
+          first.focus({ preventScroll: true });
+        } catch {
+          /* Then it is merely scrolled to and opened, which is most of the ask. */
+        }
+      }
       return null;
     }
 

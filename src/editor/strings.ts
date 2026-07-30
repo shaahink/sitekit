@@ -116,6 +116,11 @@ export interface EditorStrings {
       cannot work out alone, which is that a section that is off is not on the
       page, so the page is not where it gets turned back on. */
   sectionHidden: string;
+  /** In a collapsed section's summary, beside its switch, when the switch is
+      off. One word, because it shares a row with the section's own name — and
+      the sentence explaining what "off" means is inside the box, where an owner
+      who opened it is asking. */
+  sectionOff: string;
 
   /* --- inline editing, on the site's own pages --------------------------- */
 
@@ -311,6 +316,7 @@ export const defaultStrings: EditorStrings = {
   sectionHidden:
     "This section isn't on the site at the moment. Nothing has been deleted — everything you've written is still here, " +
     "and this switch is where it comes back. It won't be on the page itself while it's off.",
+  sectionOff: "Off",
 
   /* Written to be read by someone who has never seen a CMS. Nothing here says
      "field", "commit", "deploy" or "collection"; an owner is changing the
@@ -495,6 +501,9 @@ const fr: EditorStrings = {
   sectionHidden:
     "Cette section n’est pas sur le site en ce moment. Rien n’a été supprimé — tout ce que vous avez écrit est toujours là, " +
     "et c’est par cet interrupteur qu’elle revient. Elle ne sera pas sur la page elle-même tant qu’elle est masquée.",
+  /* Feminine, because it is agreeing with `section` — the marker is read as
+     "Contact — masquée", not as a label on a switch. */
+  sectionOff: "Masquée",
 
   inlineIdle: "Touchez un texte surligné pour le changer.",
   inlineFocused: "Vous changez {what}",
@@ -659,6 +668,9 @@ const fa: EditorStrings = {
   sectionHidden:
     "این بخش الان روی سایت نیست. چیزی حذف نشده — هرچه نوشته‌ای سر جایش است، " +
     "و همین کلید جایی است که برمی‌گردد. تا وقتی خاموش است، روی خود صفحه هم نخواهد بود.",
+  /* The same word `sectionHidden` already uses for this state two lines up, so
+     the marker and the sentence explaining it are not two vocabularies. */
+  sectionOff: "خاموش",
 
   inlineIdle: "روی هر متن هایلایت‌شده بزن تا عوضش کنی.",
   inlineFocused: "در حال تغییر {what}",

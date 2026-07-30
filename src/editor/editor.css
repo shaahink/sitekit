@@ -241,6 +241,117 @@ body {
   color: var(--sk-editor-ink);
 }
 
+/* A top-level section, closed.
+   ---------------------------------------------------------------------------
+   The panel was 11,670px on bez and 14,437 on nimagiti with the first on/off
+   switch eleven and a half screens down (§1.4, §1.8). Collapsed, the form is a
+   list of the owner's own sections — so the summary row is the primary view of
+   this editor, and it is sized like one: 44px minimum, which is the same thumb
+   floor the bar's buttons and the repeater's arrows already meet.
+
+   `display: flex` takes the native disclosure marker away, so the glyph below
+   replaces it. That is a trade worth making: a triangle that cannot be put on
+   the correct side of a Persian summary is worse than one we draw ourselves. */
+.sk-editor__group--fold {
+  /* Closed, the box is its own summary and nothing else, so it carries no
+     padding to hold — and the sections sit closer together than two open boxes
+     would, because closed they are a list of the owner's own page rather than a
+     stack of forms. */
+  margin-block: 0.4rem;
+  padding-block: 0;
+}
+.sk-editor__group--fold[open] {
+  margin-block: var(--sk-editor-gap);
+  padding-block: 0.5rem 1rem;
+}
+
+.sk-editor__summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-block-size: 44px;
+  padding-inline: 0;
+  /* No block padding: the switch inside is a 44px square and the row is 44px,
+     so padding here would make the row 55 and lose the pitch this step is
+     measured on. */
+  padding-block: 0;
+  cursor: pointer;
+  /* The row is a control; a stray double-tap should open the section, not
+     select its name. */
+  user-select: none;
+  list-style: none;
+}
+.sk-editor__summary::-webkit-details-marker {
+  display: none;
+}
+.sk-editor__summary:focus-visible {
+  outline: 2px solid var(--sk-editor-accent);
+  outline-offset: 2px;
+}
+
+/* Two glyphs rather than one rotated, because the closed one points the way the
+   language reads and a transform would need mirroring to say that. */
+.sk-editor__summary::before {
+  content: "▸";
+  flex: none;
+  font-size: 0.85em;
+  color: var(--sk-editor-muted);
+}
+[dir="rtl"] .sk-editor__summary::before {
+  content: "◂";
+}
+[open] > .sk-editor__summary::before,
+[dir="rtl"] [open] > .sk-editor__summary::before {
+  content: "▾";
+}
+
+/* The name takes the row and pushes the switch and the marker to the end, so
+   every section's switch is on one vertical line down the panel. */
+.sk-editor__summarylabel {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+/* The switch, in the summary: no box of its own, because the summary is the
+   box — but a 44px square of it, because a checkbox is 18px and this is the one
+   control on the row that changes what the public sees. Measured at 18×18 on
+   the first pass, which is findable and not hittable; the square is what makes
+   the difference, and `sectionSwitch` forwards a tap on it to the input inside. */
+.sk-editor__summary .sk-editor__section {
+  flex: none;
+  justify-content: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+
+.sk-editor__offmark {
+  flex: none;
+  font-family: var(--sk-editor-font);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sk-editor-muted);
+}
+.sk-editor__offmark[hidden] { display: none; }
+
+/* Named by a label, hidden from the eye. Not `display: none`, which would take
+   it out of the accessibility tree along with the sentence it is carrying. */
+.sk-editor__label--offscreen {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .sk-editor__row {
   padding-block: 0.75rem;
   border-block-start: 1px solid var(--sk-editor-line-soft);
@@ -432,11 +543,19 @@ body {
 /* The whole box dims when the section is off. The fields stay editable and
    still save — an owner writing a section before turning it on is the normal
    way round — so this says "not public yet", not "not editable". */
-.sk-editor__group.is-off > *:not(.sk-editor__section):not(.sk-editor__legend) {
+.sk-editor__group.is-off > *:not(.sk-editor__section):not(.sk-editor__legend):not(.sk-editor__sectionnote) {
   opacity: 0.55;
 }
 .sk-editor__group.is-off > .sk-editor__legend {
   color: var(--sk-editor-muted);
+}
+
+/* Collapsed, the switch is in the summary and the note is the first thing
+   inside the box — so it needs the separation the switch's own box used to give
+   it, and it must not be dimmed by the rule above: it is the explanation of the
+   state, not part of what the state greys out. */
+.sk-editor__group--fold > .sk-editor__sectionnote {
+  margin-block-end: var(--sk-editor-gap);
 }
 
 /* The save bar stays reachable with a thumb. */

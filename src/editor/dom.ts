@@ -38,6 +38,23 @@ export function grow(area: HTMLTextAreaElement): void {
   area.style.blockSize = `${area.scrollHeight + 2}px`;
 }
 
+/** Open every disclosure above a node, so something the panel needs an owner
+    to see is not behind a summary they never tapped.
+
+    Three callers, all of them one of §2.4's auto-open rules: a field that is
+    holding Save, a field a rejected save complained about, and a field an
+    incoming link named. Written from the node outwards rather than from the top
+    level down, so a nested collapse later inherits it for free.
+
+    `tagName` rather than `instanceof HTMLDetailsElement`: this file is the one
+    the tests can reach, and a DOM standing in for a browser's is not obliged to
+    export the same constructors. */
+export function reveal(node: HTMLElement): void {
+  for (let up = node.parentElement; up; up = up.parentElement) {
+    if (up.tagName === "DETAILS") (up as HTMLDetailsElement).open = true;
+  }
+}
+
 /** CSS.escape where it exists, and enough of it where it doesn't: the only
     place this is used builds an attribute selector, so quotes and backslashes
     are the whole risk. */

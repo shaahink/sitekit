@@ -91,23 +91,98 @@ export class Uploads {
   }
 }
 
-export function render(field: Field, values: unknown, context: RenderContext): HTMLElement {
+export interface RenderOptions {
+  /** Draw this field as a collapsed section rather than an open box. Passed by
+      the panel for its top-level fields and by nothing else — see `box()`. */
+  collapsed?: boolean;
+}
+
+export function render(
+  field: Field,
+  values: unknown,
+  context: RenderContext,
+  options: RenderOptions = {}
+): HTMLElement {
   /* `values` is the panel's own copy of the document and every control writes
      back into it, so a repeater always has the current text of its rows to
      ship when they move. Nothing else reads it — the server applies edits to
      its own freshly-read file, which is what keeps a one-line edit a one-line
      diff. */
   if (field.kind === "group") {
-    const group = el("fieldset", "sk-editor__group");
-    group.append(el("legend", "sk-editor__legend", field.label));
-    if (field.toggle) group.append(sectionSwitch(field.toggle, values, context, group));
+    const group = box(field.label, options);
+    if (field.toggle) {
+      const { control: sw, note } = sectionSwitch(field.toggle, values, context, group, options);
+      /* Collapsed, the switch is *in* the summary and the note is the first
+         thing inside the box; open, both sit at the head of the box as they
+         always have — where `sectionSwitch` has already put the note inside the
+         switch's own wrapper, so appending it again here would move it out. The
+         note is never in the summary: a paragraph is not phrasing content, and
+         the summary's job at a glance is the marker. */
+      if (options.collapsed) {
+        group.querySelector("summary")?.append(sw);
+        group.append(note);
+      } else {
+        group.append(sw);
+      }
+    }
     for (const child of field.fields) group.append(render(child, values, context));
     return group;
   }
 
-  if (field.kind === "array") return list(field, values, context);
+  if (field.kind === "array") return list(field, values, context, options);
 
   return control(field, values, context);
+}
+
+/* A section's box, and whether it starts open.
+   ---------------------------------------------------------------------------
+   Until 0.17.0 every group was a `<fieldset>` with a `<legend>` and the panel
+   was the sum of them: 11,670px on bez and 14,437 on nimagiti, with the first
+   on/off switch eleven and a half screens down (§1.4, §1.8 — measured, not
+   estimated). A form that long is not a form an owner reads; it is one they
+   scroll past looking for the sentence they came to fix.
+
+   So a top-level section is a disclosure, closed. What that buys is in §2.4's
+   table, and the thing it buys that is not a number is the first view in this
+   editor that shows an owner the shape of their own site in one screen.
+
+   Only the top level. A list's rows and a nested group keep the box they have:
+   an owner who has opened *Hero* to change a word should not then have to open
+   each thing inside it, and nesting disclosures is how a form becomes a maze.
+
+   `<details>` rather than a hand-built accordion because the browser already
+   owns this behaviour — the open state, the keyboard, the announcement, and
+   `find-in-page` opening a closed section to show a match. `sk-editor__legend`
+   is on the summary as well as on a legend so every rule written against the
+   old shape still applies to the new one. */
+function box(label: string, options: RenderOptions): HTMLElement {
+  if (!options.collapsed) {
+    const open = el("fieldset", "sk-editor__group");
+    open.append(el("legend", "sk-editor__legend", label));
+    return open;
+  }
+
+  const fold = el("details", "sk-editor__group sk-editor__group--fold");
+  const summary = el("summary", "sk-editor__legend sk-editor__summary");
+  summary.append(el("span", "sk-editor__summarylabel", label));
+  /* The name of the disclosure is the section's name and nothing else. Without
+     this the summary's accessible name is computed from everything inside it,
+     so a section with a switch announces as "Film Show this section on the site
+     Off" — the switch says all three of those things itself, one control down. */
+  summary.setAttribute("aria-label", label);
+  fold.append(summary);
+
+  /* A textarea inside a closed `<details>` has no layout, so `grow()` reads a
+     scrollHeight of 0 and sets the box to its 2px borders — the section opens
+     with every paragraph in a hairline. Nothing can measure it until the
+     browser has laid it out, which is the frame after this event. */
+  fold.addEventListener("toggle", () => {
+    if (!fold.open) return;
+    requestAnimationFrame(() => {
+      for (const area of fold.querySelectorAll("textarea")) grow(area);
+    });
+  });
+  return fold;
 }
 
 /* Repeaters — the rows themselves, and the four things you can do to them.
@@ -125,11 +200,16 @@ export function render(field: Field, values: unknown, context: RenderContext): H
 function list(
   field: Extract<Field, { kind: "array" }>,
   values: unknown,
-  context: RenderContext
+  context: RenderContext,
+  options: RenderOptions = {}
 ): HTMLElement {
   const { strings, dirty } = context;
-  const group = el("fieldset", "sk-editor__group sk-editor__group--list");
-  group.append(el("legend", "sk-editor__legend", field.label));
+  /* A list at the top level is a section of the owner's page like any other —
+     and the longest thing in the form, so it is the last one that should be the
+     exception. Its own class rides along for the rules that mark a reordered
+     list whole. */
+  const group = box(field.label, options);
+  group.classList.add("sk-editor__group--list");
 
   let existing = valueAt(values, field.path);
   if (!Array.isArray(existing)) {
@@ -312,20 +392,38 @@ function blankRow(field: Field): unknown {
 
    The note also says the thing an owner cannot discover for themselves: a
    section that is off is not rendered at all, so the page it used to be on is
-   not where you go to turn it back on. This panel is. */
+   not where you go to turn it back on. This panel is.
+
+   Since 0.17.0 a top-level section is collapsed, and this is the control that
+   collapse exists for: §1.8 measured the first switch on a site 9,277–10,519px
+   down the panel — findable only by scrolling eleven screens past it. In the
+   summary it is beside the name of the section it belongs to, and the marker
+   says which way it is set without opening anything. */
 function sectionSwitch(
   field: BooleanField,
   values: unknown,
   context: RenderContext,
-  group: HTMLElement
-): HTMLElement {
+  group: HTMLElement,
+  options: RenderOptions
+): { control: HTMLElement; note: HTMLElement } {
+  const inSummary = Boolean(options.collapsed);
   const wrap = control(field, values, context, {
-    label: context.strings.sectionShow
+    label: context.strings.sectionShow,
+    /* Inside a `<summary>` the wrapper has to be phrasing content, and a `div`
+       is not. Everything else about the control is identical — same Dirty, same
+       edit, same save — which is the whole reason it is drawn by `control()`
+       and not by hand here. */
+    ...(inSummary ? { as: "span" as const, hideLabel: true } : {})
   });
   wrap.classList.add("sk-editor__section");
 
   const note = el("p", "sk-editor__sectionnote", context.strings.sectionHidden);
-  wrap.append(note);
+  if (!inSummary) wrap.append(note);
+
+  const marker = inSummary
+    ? el("span", "sk-editor__offmark", context.strings.sectionOff)
+    : null;
+  if (marker) wrap.append(marker);
 
   const input = wrap.querySelector("input") as HTMLInputElement;
   const reflect = (): void => {
@@ -334,11 +432,40 @@ function sectionSwitch(
        what they are typing is not on the site yet. */
     group.classList.toggle("is-off", !input.checked);
     note.hidden = input.checked;
+    if (marker) marker.hidden = input.checked;
   };
   input.addEventListener("input", reflect);
   reflect();
 
-  return wrap;
+  /* Inside a summary the whole square is the switch and none of it is the
+     disclosure. Which half of that needs code depends on where the tap lands,
+     and it took two measured wrong answers to find out where the line is.
+
+     A `<summary>` toggles through its *activation behaviour*, and the activation
+     target is picked by walking the event's path for the first thing that has
+     one. A checkbox has one, so a tap on the box is the checkbox's and the
+     summary never sees it — that is the spec's own rule and not a quirk to
+     distrust. A tap on the square *around* the box has nothing of its own, so
+     the walk reaches the summary and the section collapses under the owner:
+     measured `open: false → true` on both sites at both widths, from a version
+     that stopped propagation and thought that was enough. Activation behaviour
+     is cancelled by `preventDefault`, never by stopping the bubble.
+
+     And it must be cancelled only there: refusing the default on the box as well
+     nets to nothing, because `click()` ticks the checkbox before dispatch and
+     un-ticks it again when the event comes back cancelled. That version measured
+     as a switch that did not move — which is exactly what a screenshot cannot
+     tell you. */
+  if (inSummary) {
+    wrap.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (event.target === input) return;
+      event.preventDefault();
+      if (event.target === wrap) input.click();
+    });
+  }
+
+  return { control: wrap, note };
 }
 
 /* A photograph, from a phone, over a connection that is not a desk.
@@ -526,16 +653,24 @@ function control(
   field: ScalarField,
   values: unknown,
   context: RenderContext,
-  overrides: { label?: string } = {}
+  overrides: { label?: string; as?: "div" | "span"; hideLabel?: boolean } = {}
 ): HTMLElement {
   if (field.kind === "image") return imageControl(field, values, context);
 
   const { strings, dirty } = context;
   const value = valueAt(values, field.path);
-  const wrap = el("div", "sk-editor__field");
+  const wrap = el(overrides.as ?? "div", "sk-editor__field");
   const id = fieldId(field.path);
 
-  const caption = el("label", "sk-editor__label", overrides.label ?? field.label);
+  /* Hidden from the eye, never from a screen reader, and never replaced by an
+     `aria-label`: the `for` association is what makes the sentence the *name* of
+     the control rather than a caption near it. A summary has one line to spend
+     and the switch's own sentence is three of them. */
+  const caption = el(
+    "label",
+    overrides.hideLabel ? "sk-editor__label sk-editor__label--offscreen" : "sk-editor__label",
+    overrides.label ?? field.label
+  );
   caption.htmlFor = id;
   /* A switch is never "optional" — it always holds one of two answers, and the
      word beside it would read as though the section itself were. */
