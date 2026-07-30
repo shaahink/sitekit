@@ -156,6 +156,14 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     entry ? `&entry=${encodeURIComponent(entry)}` : ""
   }`;
 
+  /* Said before the request, not after it. Measured under a GitHub that took
+     ten seconds: the bar was on screen the whole time with no words in it at
+     all and Save enabled, while the panel in the next window said "Loading…".
+     An owner staring at an empty bar has no way to tell a slow network from a
+     broken editor — and an enabled Save on a page whose values have not arrived
+     is an offer the editor cannot keep. */
+  idle(strings.loading);
+
   let loaded: Response;
   try {
     loaded = await fetch(query, { headers: { accept: "application/json" } });

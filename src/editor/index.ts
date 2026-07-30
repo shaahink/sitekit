@@ -148,10 +148,17 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       point is that the owner signs in *without the page reloading*, because a
       reload is what would lose the work this is promising to keep. */
   async function mountGoogleButton(host: HTMLElement, onSignedIn: () => void): Promise<void> {
-    const config = (await (await fetch(auth)).json()) as {
-      configured?: boolean;
-      clientId?: string;
-    };
+    /* Guarded like every other fetch on this surface. Unguarded, a phone with
+       no signal rejected here and took the *caller* with it — and one of the
+       two callers is the note under a refused save, where the whole promise is
+       that the owner's work survives. See the header of `commit`. */
+    let config: { configured?: boolean; clientId?: string };
+    try {
+      config = (await (await fetch(auth)).json()) as typeof config;
+    } catch {
+      host.append(el("p", "sk-editor__error", strings.startFailed));
+      return;
+    }
 
     if (!config.configured || !config.clientId) {
       host.append(el("p", "sk-editor__note", strings.signInUnavailable));
@@ -200,11 +207,17 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     host: HTMLElement,
     onSignedIn: () => void
   ): Promise<void> {
-    const response = await fetch(auth, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ credential })
-    });
+    let response: Response;
+    try {
+      response = await fetch(auth, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ credential })
+      });
+    } catch {
+      host.append(el("p", "sk-editor__error", strings.signInFailed));
+      return;
+    }
     if (!response.ok) {
       host.append(el("p", "sk-editor__error", await errorText(response, strings.signInFailed)));
       return;
@@ -221,7 +234,13 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     const out = el("button", "sk-editor__link", strings.signOut);
     out.type = "button";
     out.addEventListener("click", () => {
-      void fetch(auth, { method: "DELETE" }).then(() => start());
+      /* `start()` either way: a DELETE that never left the browser has not
+         signed anybody out, and re-reading the session is how the panel finds
+         out which of those happened. Unhandled, this was the fourth rejection
+         on this surface with nowhere to land. */
+      void fetch(auth, { method: "DELETE" })
+        .catch(() => {})
+        .then(() => start());
     });
     bar.append(out);
 
@@ -305,9 +324,16 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     footer.textContent = "";
     form.append(el("p", "sk-editor__status", strings.loading));
 
-    const response = await fetch(
-      `${content}?collection=${encodeURIComponent(collection)}&entry=${encodeURIComponent(entry)}`
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `${content}?collection=${encodeURIComponent(collection)}&entry=${encodeURIComponent(entry)}`
+      );
+    } catch {
+      form.textContent = "";
+      form.append(el("p", "sk-editor__error", strings.loadFailed));
+      return;
+    }
     form.textContent = "";
     if (!response.ok) {
       form.append(el("p", "sk-editor__error", await errorText(response, strings.loadFailed)));
@@ -372,9 +398,22 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
         note,
         resting: fill(strings.editingFile, { path: body.path }),
         changed: context.changed
-      }).then((next) => {
-        if (next) sha = next;
-      });
+      }).then(
+        (next) => {
+          if (next) sha = next;
+        },
+        /* A backstop, not the fix: `commit` handles its own failures, and this
+           is here so that no future one can ever leave the button disabled with
+           nothing said. A save button that cannot be pressed again and gives no
+           reason is the worst state this panel can reach, and it was reachable
+           by one unhandled rejection. */
+        (error: unknown) => {
+          console.error("sk-editor: save failed unexpectedly:", error);
+          save.disabled = false;
+          save.textContent = strings.save;
+          note.textContent = strings.saveUnreachable;
+        }
+      );
     });
   }
 
@@ -399,21 +438,44 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     save.textContent = strings.saving;
     for (const stale of form.querySelectorAll(".sk-editor__issue")) stale.remove();
 
-    const response = await fetch(content, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        collection: args.collection,
-        entry: args.entry,
-        sha: args.sha,
-        edits: dirty.edits(),
-        /* Beside the edits, never inside them: an edit says `upload:u1` and
-           the server decides where the file lands. Omitted entirely when there
-           are none, so a text-only save is the same request it has always
-           been and still goes down the Contents API path. */
-        ...(uploads.size ? { uploads: uploads.list() } : {})
-      })
-    });
+    /* The one measured failure that was both silent and permanent.
+       -------------------------------------------------------------------
+       Unguarded, a dropped connection rejected here: the button stayed
+       "Saving…" and disabled for as long as the tab was open, the note went on
+       saying which file was being edited, and nothing on screen said anything
+       had gone wrong. Session 16, drill 2b — the harness killed 120ms after
+       Save was pressed, in a real browser, on the surface an owner reaches
+       first. The inline editor wraps its own save and recovered correctly in
+       the same drill, which is what made this a gap rather than a design.
+
+       The words are all still here — `dirty` and the form both hold them — so
+       the honest instruction is to press Save again and *not* to reload. The
+       panel has no draft on disk to reload into; that is the other half of the
+       fix and it is E1's, because a restore that silently drops a photograph an
+       owner had chosen would be a new loss wearing a fix's clothes. */
+    let response: Response;
+    try {
+      response = await fetch(content, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          collection: args.collection,
+          entry: args.entry,
+          sha: args.sha,
+          edits: dirty.edits(),
+          /* Beside the edits, never inside them: an edit says `upload:u1` and
+             the server decides where the file lands. Omitted entirely when
+             there are none, so a text-only save is the same request it has
+             always been and still goes down the Contents API path. */
+          ...(uploads.size ? { uploads: uploads.list() } : {})
+        })
+      });
+    } catch {
+      save.disabled = false;
+      save.textContent = strings.save;
+      note.textContent = strings.saveUnreachable;
+      return null;
+    }
 
     const body = (await response.json().catch(() => ({}))) as {
       sha?: string;
@@ -486,11 +548,18 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       writes nothing to the content. Rejects with a message worth reading; the
       panel keeps whatever was typed either way. */
   async function sendRequest(text: string): Promise<string> {
-    const response = await fetch(content, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ request: { text, page: location.pathname } })
-    });
+    let response: Response;
+    try {
+      response = await fetch(content, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request: { text, page: location.pathname } })
+      });
+    } catch {
+      /* The caller shows `error.message` verbatim, so an unguarded rejection
+         here put the browser's own "Failed to fetch" in front of an owner. */
+      throw new Error(strings.homeRequestFailed);
+    }
     if (!response.ok) {
       throw new Error(await errorText(response, strings.homeRequestFailed));
     }
