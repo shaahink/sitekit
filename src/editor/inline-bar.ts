@@ -51,7 +51,7 @@ export class Bar {
   private readonly helpButton: HTMLButtonElement;
   private readonly exitButton: HTMLButtonElement;
 
-  constructor(cssHref: string, strings: BarStrings, buttons: BarButtons) {
+  constructor(cssHref: string, strings: BarStrings, dir: "ltr" | "rtl", buttons: BarButtons) {
     /* A custom element name rather than a div: it cannot collide with a site's
        selectors, and it shows up in devtools as what it is. */
     this.host = document.createElement(HOST_TAG);
@@ -64,6 +64,13 @@ export class Bar {
     this.bar = document.createElement("div");
     this.bar.className = "bar";
     this.bar.hidden = true;
+    /* The bar's own direction, not the page's — and it has to be written here
+       rather than inherited, because `:host { all: initial }` resets direction
+       to `ltr` on purpose and everything inside the shadow root inherits that.
+       The attribute alone would not be enough either: a UA rule loses to the
+       sheet's own `.bar { direction: ltr }`, so `inline.css` carries the
+       author rule that this attribute selects. */
+    this.bar.setAttribute("dir", dir);
     /* Announced, but never stealing focus from the text being typed. */
     this.bar.setAttribute("role", "region");
     this.bar.setAttribute("aria-label", strings.regionLabel);

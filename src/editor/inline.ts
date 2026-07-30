@@ -28,7 +28,7 @@ import { Dirty } from "./dirty.js";
 import { clearDraft, draftKey, readDraft, saveDraft, type Draft } from "./drafts.js";
 import { Bar } from "./inline-bar.js";
 import { signInHref } from "./return-to.js";
-import { defaultStrings, fill, type EditorStrings } from "./strings.js";
+import { dirFor, editorStrings, fill, type EditorStrings } from "./strings.js";
 import { coerce, findField, plural, valueAt } from "./values.js";
 
 export interface InlineOptions {
@@ -41,6 +41,11 @@ export interface InlineOptions {
       `/editor-inline.css`. */
   cssHref?: string;
   strings?: Partial<EditorStrings>;
+  /** Force the bar's language. Left alone it follows `<html lang>`, which is
+      the language of the page the owner is looking at — right by construction
+      on a bilingual site, where the same layout installs the bar on both
+      halves. */
+  lang?: string;
 }
 
 interface Editable {
@@ -96,7 +101,11 @@ const INTERACTIVE = [
 ].join(", ");
 
 export async function startInlineEditor(options: InlineOptions = {}): Promise<void> {
-  const strings: EditorStrings = { ...defaultStrings, ...options.strings };
+  /* The page the owner is standing on is the one thing that always knows which
+     language they are editing in — the same source `widget/chrome.ts` reads,
+     and for the same reason. */
+  const lang = options.lang ?? document.documentElement.lang;
+  const strings: EditorStrings = editorStrings(lang, options.strings);
   const contentPath = options.contentPath ?? "/api/content";
   const cssHref = options.cssHref ?? "/editor-inline.css";
 
@@ -137,7 +146,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     helpCancel: strings.inlineHelpCancel,
     helpSave: strings.inlineHelpSave,
     helpPanel: strings.inlineHelpPanel
-  }, {
+  }, dirFor(lang), {
     save: () => void commit(),
     revert: () => revertFocused(),
     discard: () => discardAll(),

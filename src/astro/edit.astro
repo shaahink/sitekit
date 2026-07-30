@@ -19,10 +19,19 @@
    review-mode gate, and on a site with islands, none of them. Nothing on this
    route needs the site's framework and nothing pulls it in.
 
-   Nor a locale. The panel's chrome is English and the content it edits carries
-   its own direction — every field is dir="auto", so a Farsi entry reads
-   right-to-left inside a left-to-right panel. That is a tool's language, not
-   the site's. */
+   The `lang` below is a starting value, not the answer, and that comment was
+   amended in 0.17.0. It used to say the panel's chrome was English because a
+   tool's language is not the site's — true until session 17 drove the editor
+   on nimagiti's Farsi page and elfine's French one and found it saying "Tap
+   any highlighted text to change it." to both owners. The kit ships three
+   locales now, and one /edit route serves both halves of a bilingual site, so
+   there is no site page to read a language off: `mountEditor` resolves one
+   (?lang= → what it remembered → the browser's own preference) and writes both
+   `lang` and `dir` onto this document. A static attribute stays because a
+   document needs one before any script runs, and the panel's stylesheet is
+   entirely logical properties, so `dir` is the whole of the right-to-left
+   layout. The fields keep their own dir="auto" regardless — a Farsi entry in
+   an English panel was always meant to read right-to-left. */
 
 /* The panel's stylesheet is copied into public/ by the site's `npm run editor`
    (the kit ships the copier; CI regenerates and diffs it) and linked below

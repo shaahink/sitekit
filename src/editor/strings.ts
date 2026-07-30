@@ -6,6 +6,22 @@
    and knows nothing about any of them, so nothing here names a studio, an
    owner or a site.
 
+   Three tables since 0.17.0, and the reason is a measurement rather than a
+   principle. Session 17's audit drove the editor on nimagiti's Farsi page and
+   on elfine's French one: both said *"Tap any highlighted text to change it."*
+   The editor was English on all six sites, including the two whose owners do
+   not read English, and it stayed that way because a site *could* translate it
+   a word at a time and no site reasonably would. A table here is the same work
+   once. The mechanism is the widget's, unchanged — `stringsFor` and
+   `editorStrings` are `src/widget/strings.ts`'s two functions with a different
+   table behind them — because two surfaces in this kit ask a site for words
+   and they should ask the same way.
+
+   The register of each table is that language's own site: French follows
+   elfine's `vous`, Farsi follows nimagiti's informal, direct second person.
+   Neither is a translation of the English word by word; both say what the
+   English sentence says.
+
    `{name}` placeholders are filled by `fill()`. */
 
 export interface EditorStrings {
@@ -382,6 +398,403 @@ export const defaultStrings: EditorStrings = {
   yesterday: "yesterday",
   daysAgo: "{days} days ago"
 };
+
+/** Elfine's French: `vous`, warm, no jargon, the guillemets and typographic
+    apostrophes her own site uses. Two things this table does deliberately —
+    it avoids past-participle agreement everywhere a count or a person could be
+    either gender ("{count} à enregistrer", not "{count} non enregistrée"),
+    because the kit does not know who is reading; and `sectionHidden` keeps all
+    three of the English sentence's jobs rather than the short one. */
+const fr: EditorStrings = {
+  loading: "Chargement…",
+  notConfigured:
+    "L’éditeur n’est pas encore configuré pour ce site. Le site lui-même n’a aucun problème.",
+  startFailed: "L’éditeur n’a pas pu démarrer.",
+
+  signInTitle: "Connectez-vous pour modifier",
+  signInNote:
+    "Utilisez le compte Google avec lequel ce site a été créé. Rien d’autre ne peut entrer.",
+  signInUnavailable:
+    "La connexion n’est pas encore en place pour ce site — le client Google n’a pas été créé. " +
+    "Rien n’est cassé ; il n’y a simplement rien à quoi se connecter.",
+  signInFailed: "Cette connexion n’a pas fonctionné.",
+  gisFailed: "Le script de connexion de Google ne s’est pas chargé.",
+  signOut: "Se déconnecter",
+
+  editing: "Vous modifiez",
+  editingFile: "Vous modifiez {path}",
+  emptyList: "Rien ici pour l’instant.",
+  optional: "facultatif",
+
+  rowAdd: "Ajouter {label}",
+  rowUp: "Monter",
+  rowDown: "Descendre",
+  rowRemove: "Retirer",
+  rowRemoveConfirm: "Touchez encore pour retirer",
+
+  imageChoose: "Choisir une photo",
+  imageReplace: "Remplacer cette photo",
+  imageWorking: "Préparation de la photo…",
+  imageReady: "Prête — {width}×{height}, {size} kB. Elle ira sur le site quand vous enregistrerez.",
+  imageTooBig: "Cette photo est trop lourde même après réduction. Essayez-en une plus petite.",
+  imageWrongType:
+    "Ce navigateur n’a pas produit de JPEG. Essayez une autre photo, ou l’éditeur complet sur un ordinateur.",
+  imageUnreadable: "Ce fichier n’a pas pu être lu comme une photo.",
+  imagePointAt: "Ou utilisez une image déjà sur le site",
+  imageNeedsAlt:
+    "Décrivez d’abord la nouvelle photo — c’est ce qu’entendront les personnes qui utilisent un lecteur d’écran.",
+
+  save: "Enregistrer",
+  saveCount: "Enregistrer {count}",
+  change: "modification",
+  changes: "modifications",
+  saving: "Enregistrement…",
+  saved: "Enregistré",
+  savedNote: "Enregistré. Le site se reconstruit dans une minute environ — ",
+  savedLink: "voir la modification",
+
+  loadFailed: "Impossible de charger ce contenu.",
+  saveFailed: "Impossible d’enregistrer cette modification.",
+  saveUnreachable:
+    "Impossible de joindre le site pour enregistrer. Tout ce que vous avez écrit est encore là — vérifiez votre connexion et appuyez de nouveau sur Enregistrer. Ne rechargez pas cette page pour l’instant.",
+  invalid: "Cette modification n’entre pas dans le modèle de contenu.",
+  conflict: "Quelqu’un d’autre a modifié ceci depuis que vous l’avez ouvert — rechargez et réessayez.",
+  reload: "Recharger",
+  /* Impersonal on purpose: "vous avez été déconnecté" has to agree with a
+     person this kit knows nothing about, so the session is the subject. */
+  expired: "Votre session s’est terminée pendant que vous travailliez. Rien de ce que vous avez écrit n’est perdu —",
+  expiredLink: "reconnectez-vous",
+  openPage: "Modifier cette page sur le site",
+  backToPage: "Retour à la page",
+
+  sectionShow: "Afficher cette section sur le site",
+  sectionHidden:
+    "Cette section n’est pas sur le site en ce moment. Rien n’a été supprimé — tout ce que vous avez écrit est toujours là, " +
+    "et c’est par cet interrupteur qu’elle revient. Elle ne sera pas sur la page elle-même tant qu’elle est masquée.",
+
+  inlineIdle: "Touchez un texte surligné pour le changer.",
+  inlineFocused: "Vous changez {what}",
+  inlinePending: "{count} à enregistrer.",
+  inlineNothing: "Rien sur cette page ne peut encore être modifié ici — essayez l’éditeur complet.",
+  inlineSignIn: "Connectez-vous d’abord, puis revenez à cette page.",
+  inlineSignInLink: "Se connecter",
+  inlineDone: "Terminé",
+  inlineRevert: "Annuler celui-ci",
+  inlineDiscard: "Tout annuler",
+  inlineHelp: "?",
+  inlineHelpTitle: "Comment ça marche",
+  inlineHelpEdit:
+    "Touchez un texte surligné et écrivez. Rien n’est public tant que vous n’appuyez pas sur Enregistrer.",
+  inlineHelpCancel:
+    "Appuyez sur Échap, ou sur « Annuler celui-ci », pour remettre un texte comme il était.",
+  inlineHelpSave:
+    "Enregistrer envoie tout ce que vous avez changé d’un coup. La page se met à jour une minute environ plus tard.",
+  inlineHelpPanel: "Le texte en gris se change dans l’éditeur complet.",
+  inlineHelpHidden:
+    "Des sections entières peuvent être masquées dans l’éditeur complet. Une section masquée n’est pas du tout sur cette page, c’est donc aussi là qu’elle revient.",
+  inlinePanelOnly: "« {label} » contient de la mise en forme, il se modifie donc dans l’éditeur complet.",
+  inlinePanelElsewhere: "« {label} » se modifie dans l’éditeur complet, pas ici sur la page.",
+  inlinePanelLink: "Ouvrir l’éditeur complet",
+  inlineBroken: "Ceci pointe vers « {path} », que le contenu n’a plus.",
+  inlineBrokenSome:
+    "Une partie du texte de cette page (marquée en rouge) pointe vers du contenu qui n’existe plus. C’est un défaut de la page, pas de ce que vous avez fait — tout le reste fonctionne.",
+  inlineDraftFound: "Vous aviez {count} ici, sans enregistrer.",
+  inlineDraftRestore: "Restaurer",
+  inlineDraftDiscard: "Abandonner",
+  inlineDraftStale:
+    "Vous aviez des modifications non enregistrées ici, mais la page a été modifiée ailleurs depuis. Elles ont été abandonnées plutôt qu’écrites par-dessus.",
+  inlineLeaveWarning: "Vous avez des modifications qui ne sont pas encore enregistrées.",
+
+  homeWelcomeTitle: "C’est ici que vous changez votre site",
+  homeWelcomeBody:
+    "Tout ce que vous écrivez ici va sur votre vrai site, en général en une ou deux minutes. Vous pouvez aussi toucher les mots sur vos propres pages et écrire par-dessus.",
+  homeWelcomeUndo:
+    "Rien de ce que vous faites ici n’est définitif. Chaque changement est conservé, donc tout peut être remis comme avant — il suffit de demander.",
+  homeWelcomeAsk:
+    "Pour tout ce qui dépasse les mots et les images — une nouvelle section, une autre mise en page — utilisez « Demander un changement » ci-dessous et décrivez ce que vous voulez.",
+  homeWelcomeClose: "C’est compris",
+  homeHelp: "?",
+  homeHelpTitle: "Qu’est-ce que c’est ?",
+
+  homeTrafficTitle: "Est-ce que quelqu’un est venu ?",
+  homeTrafficLine: "{visitors} et {views} ces {days} derniers jours",
+  homeTrafficChange: "{percent}% par rapport aux {days} jours précédents",
+  homeTrafficNone: "Personne pour l’instant. C’est normal pour un site qui vient d’être mis en ligne.",
+  homePagesTitle: "Les plus lues",
+  homePageLine: "{path} — {views}",
+  homeShareLink: "Voir tous vos chiffres de visite",
+
+  homeChangesTitle: "Ce qui a changé",
+  homeChangesNone:
+    "Rien n’a encore changé. Choisissez une page ci-dessous et essayez quelque chose — vous pouvez toujours le remettre.",
+  homeChangesUnavailable:
+    "Impossible de lire vos changements récents pour le moment. Votre site va bien et vos mots aussi — cette liste devrait revenir dans une minute.",
+  homeChangeDetail: "Voir exactement ce qui a changé",
+  homeChangeBy: "par {who}",
+  homeChangeByUs: "par sk",
+  homeDeployLive: "Votre dernier changement est sur le site.",
+  homeDeployBuilding:
+    "Votre dernier changement est en train de monter — laissez-lui une minute, puis rechargez votre site.",
+  homeDeployFailed: "Votre dernier changement n’est pas encore en ligne : {reason}",
+
+  homeRequestOpen: "Demander un changement",
+  homeRequestTitle: "Qu’aimeriez-vous changer ?",
+  homeRequestPlaceholder: "Une nouvelle section pour les ateliers, avec trois photos et un paragraphe…",
+  homeRequestNote: "Cela va directement à Shahin. Décrivez-le comme vous voulez.",
+  homeRequestSend: "Envoyer",
+  homeRequestSending: "Envoi…",
+  homeRequestSent: "Envoyé. Vous aurez une réponse.",
+  homeRequestSeeIt: "Suivez-le ici",
+  homeRequestFailed:
+    "Impossible d’envoyer pour le moment. Vos mots sont toujours là — réessayez dans un instant.",
+
+  cancel: "Annuler",
+  visitor: "visiteur",
+  visitors: "visiteurs",
+  view: "vue",
+  views: "vues",
+  today: "aujourd’hui",
+  yesterday: "hier",
+  daysAgo: "il y a {days} jours"
+};
+
+/** Nima's Farsi: informal and direct, the same register his review widget
+    already speaks to his visitors in — and he is the owner, so the editor has
+    no reason to be more formal with him than his own site is.
+
+    `change` and `changes` are the same word, and that is correct rather than
+    lazy: Persian does not pluralise a noun after a numeral, so "۲ تغییر" is
+    what a Persian reader expects and "۲ تغییرها" is wrong. `plural()` puts the
+    number in front of whichever it picks, so both keys must be the singular.
+
+    What this table does *not* yet do is shape the numbers themselves — a count
+    still arrives as `2` rather than `۲`, because the digits come from
+    `plural()` and not from here. Left for the bar's rebuild, which is where
+    the count becomes a chip of its own. */
+const fa: EditorStrings = {
+  loading: "در حال بارگذاری…",
+  notConfigured: "ویرایشگر هنوز برای این سایت تنظیم نشده. خود سایت هیچ مشکلی ندارد.",
+  startFailed: "ویرایشگر بالا نیامد.",
+
+  signInTitle: "برای ویرایش وارد شو",
+  signInNote: "با همان حساب گوگلی وارد شو که سایت با آن ساخته شده. هیچ‌کس دیگری راه ندارد.",
+  signInUnavailable:
+    "ورود برای این سایت هنوز راه نیفتاده — کلاینت گوگلش ساخته نشده. " +
+    "چیزی خراب نیست؛ فقط فعلاً جایی برای وارد شدن وجود ندارد.",
+  signInFailed: "این ورود نگرفت.",
+  gisFailed: "اسکریپت ورود گوگل بارگذاری نشد.",
+  signOut: "خروج از حساب",
+
+  editing: "در حال ویرایش",
+  editingFile: "در حال ویرایش {path}",
+  emptyList: "هنوز چیزی اینجا نیست.",
+  optional: "اختیاری",
+
+  rowAdd: "افزودن {label}",
+  rowUp: "ببر بالا",
+  rowDown: "ببر پایین",
+  rowRemove: "حذف",
+  rowRemoveConfirm: "برای حذف دوباره بزن",
+
+  imageChoose: "یک عکس انتخاب کن",
+  imageReplace: "این عکس را عوض کن",
+  imageWorking: "عکس دارد آماده می‌شود…",
+  imageReady: "آماده است — {width}×{height}، {size} کیلوبایت. با ذخیره روی سایت می‌رود.",
+  imageTooBig: "این عکس حتی بعد از کوچک شدن هم زیادی سنگین است. یکی کوچک‌تر امتحان کن.",
+  imageWrongType:
+    "این مرورگر JPEG نساخت. عکس دیگری امتحان کن، یا ویرایشگر کامل را روی کامپیوتر باز کن.",
+  imageUnreadable: "این فایل به‌عنوان عکس خوانده نشد.",
+  imagePointAt: "یا از عکسی که همین حالا روی سایت است استفاده کن",
+  imageNeedsAlt:
+    "اول عکس تازه را توصیف کن — این همان چیزی است که کسانی که از صفحه‌خوان استفاده می‌کنند می‌شنوند.",
+
+  save: "ذخیره",
+  saveCount: "ذخیره {count}",
+  change: "تغییر",
+  changes: "تغییر",
+  saving: "در حال ذخیره…",
+  saved: "ذخیره شد",
+  savedNote: "ذخیره شد. سایت تا حدود یک دقیقه دیگر دوباره ساخته می‌شود — ",
+  savedLink: "تغییر را ببین",
+
+  loadFailed: "این محتوا خوانده نشد.",
+  saveFailed: "این تغییر ذخیره نشد.",
+  saveUnreachable:
+    "برای ذخیره به سایت نرسیدیم. هرچه نوشته‌ای همین‌جا هست — اتصالت را نگاه کن و دوباره ذخیره را بزن. فعلاً این صفحه را دوباره بارگذاری نکن.",
+  invalid: "این تغییر با ساختار محتوا جور درنمی‌آید.",
+  conflict: "از وقتی این را باز کرده‌ای کس دیگری عوضش کرده — دوباره بارگذاری کن و باز امتحان کن.",
+  reload: "بارگذاری دوباره",
+  expired: "وسط کار از حساب بیرون آمدی. هیچ‌کدام از نوشته‌هایت از بین نرفته —",
+  expiredLink: "دوباره وارد شو",
+  openPage: "این صفحه را روی خود سایت ویرایش کن",
+  backToPage: "برگرد به صفحه",
+
+  sectionShow: "این بخش روی سایت نشان داده شود",
+  sectionHidden:
+    "این بخش الان روی سایت نیست. چیزی حذف نشده — هرچه نوشته‌ای سر جایش است، " +
+    "و همین کلید جایی است که برمی‌گردد. تا وقتی خاموش است، روی خود صفحه هم نخواهد بود.",
+
+  inlineIdle: "روی هر متن هایلایت‌شده بزن تا عوضش کنی.",
+  inlineFocused: "در حال تغییر {what}",
+  inlinePending: "{count} هنوز ذخیره نشده.",
+  inlineNothing: "فعلاً چیزی در این صفحه از همین‌جا عوض نمی‌شود — ویرایشگر کامل را امتحان کن.",
+  inlineSignIn: "اول وارد شو، بعد به این صفحه برگرد.",
+  inlineSignInLink: "ورود",
+  inlineDone: "تمام",
+  inlineRevert: "همین یکی را برگردان",
+  inlineDiscard: "همه را برگردان",
+  inlineHelp: "?",
+  inlineHelpTitle: "این چطور کار می‌کند",
+  inlineHelpEdit: "روی متن هایلایت‌شده بزن و بنویس. تا ذخیره را نزنی هیچ‌چیز عمومی نمی‌شود.",
+  inlineHelpCancel:
+    "برای اینکه یک متن به حالت اولش برگردد، Escape را بزن یا «همین یکی را برگردان».",
+  inlineHelpSave: "ذخیره همه‌ی تغییرها را یک‌جا می‌فرستد. صفحه حدود یک دقیقه بعد به‌روز می‌شود.",
+  inlineHelpPanel: "متن خاکستری را باید در ویرایشگر کامل عوض کرد.",
+  inlineHelpHidden:
+    "بخش‌های کامل را می‌شود در ویرایشگر کامل خاموش کرد. بخشی که خاموش است اصلاً روی این صفحه نیست، پس همان‌جا هم برمی‌گردد.",
+  inlinePanelOnly: "«{label}» قالب‌بندی دارد، برای همین در ویرایشگر کامل عوض می‌شود.",
+  inlinePanelElsewhere: "«{label}» در ویرایشگر کامل عوض می‌شود، نه همین‌جا روی صفحه.",
+  inlinePanelLink: "ویرایشگر کامل را باز کن",
+  inlineBroken: "این به «{path}» اشاره می‌کند که دیگر در محتوا نیست.",
+  inlineBrokenSome:
+    "بخشی از متن این صفحه (با قرمز مشخص شده) به محتوایی اشاره می‌کند که دیگر وجود ندارد. این ایراد خود صفحه است، نه کاری که تو کرده‌ای — بقیه‌اش همچنان کار می‌کند.",
+  inlineDraftFound: "{count} را اینجا ذخیره‌نشده گذاشته بودی.",
+  inlineDraftRestore: "برگردان",
+  inlineDraftDiscard: "بی‌خیال",
+  inlineDraftStale:
+    "اینجا تغییرهای ذخیره‌نشده داشتی، ولی از آن موقع صفحه جای دیگری عوض شده. به‌جای اینکه روی آن نوشته شوند، کنار گذاشته شدند.",
+  inlineLeaveWarning: "تغییرهایی داری که هنوز ذخیره نشده.",
+
+  homeWelcomeTitle: "اینجا جایی است که سایتت را عوض می‌کنی",
+  homeWelcomeBody:
+    "هرچه اینجا بنویسی روی سایت واقعی‌ات می‌رود، معمولاً تا یکی دو دقیقه. می‌توانی روی کلمه‌های صفحه‌های خودت هم بزنی و رویشان بنویسی.",
+  homeWelcomeUndo:
+    "هیچ‌کدام از کارهایت اینجا همیشگی نیست. هر تغییری نگه داشته می‌شود، پس هر چیزی را می‌شود به حالت اولش برگرداند — فقط بگو.",
+  homeWelcomeAsk:
+    "برای هرچیزی بزرگ‌تر از کلمه و عکس — یک بخش تازه، یک چیدمان دیگر — از «درخواست تغییر» پایین استفاده کن و بنویس چه می‌خواهی.",
+  homeWelcomeClose: "فهمیدم",
+  homeHelp: "?",
+  homeHelpTitle: "این چیست؟",
+
+  homeTrafficTitle: "کسی آمد؟",
+  homeTrafficLine: "{visitors} و {views} در {days} روز گذشته",
+  homeTrafficChange: "{percent}% نسبت به {days} روز قبلش",
+  homeTrafficNone: "هنوز هیچ‌کس. برای سایتی که تازه بالا آمده طبیعی است.",
+  homePagesTitle: "بیشترین خوانده‌شده",
+  homePageLine: "{path} — {views}",
+  homeShareLink: "همه‌ی آمار بازدیدت را ببین",
+
+  homeChangesTitle: "چه چیزی عوض شد",
+  homeChangesNone:
+    "هنوز چیزی عوض نشده. یکی از صفحه‌های پایین را بردار و چیزی را امتحان کن — همیشه می‌شود برش گرداند.",
+  homeChangesUnavailable:
+    "الان نشد تغییرهای اخیرت را خواند. سایتت سالم است و نوشته‌هایت هم — این فهرست تا یک دقیقه دیگر برمی‌گردد.",
+  homeChangeDetail: "دقیقاً ببین چه عوض شد",
+  homeChangeBy: "به‌دست {who}",
+  homeChangeByUs: "به‌دست sk",
+  homeDeployLive: "آخرین تغییرت روی سایت است.",
+  homeDeployBuilding: "آخرین تغییرت دارد بالا می‌رود — یک دقیقه صبر کن، بعد سایتت را دوباره بارگذاری کن.",
+  homeDeployFailed: "آخرین تغییرت هنوز بالا نرفته: {reason}",
+
+  homeRequestOpen: "درخواست تغییر",
+  homeRequestTitle: "دوست داری چه چیزی عوض شود؟",
+  homeRequestPlaceholder: "یک بخش تازه برای کارگاه‌ها، با سه عکس و یک پاراگراف…",
+  homeRequestNote: "این مستقیم می‌رود پیش شاهین. هرطور دوست داری توضیحش بده.",
+  homeRequestSend: "بفرست",
+  homeRequestSending: "در حال ارسال…",
+  homeRequestSent: "فرستاده شد. جوابش را می‌گیری.",
+  homeRequestSeeIt: "از همین‌جا دنبالش کن",
+  homeRequestFailed: "الان فرستاده نشد. نوشته‌هایت همین‌جاست — کمی بعد دوباره امتحان کن.",
+
+  cancel: "بی‌خیال",
+  visitor: "بازدیدکننده",
+  visitors: "بازدیدکننده",
+  view: "بازدید",
+  views: "بازدید",
+  today: "امروز",
+  yesterday: "دیروز",
+  daysAgo: "{days} روز پیش"
+};
+
+/** Every locale the editor ships, by the language subtag it answers to. The
+    same three the widget ships, and for the same reason: these are the
+    languages the fleet's owners actually read. */
+export const editorLocales: Record<string, EditorStrings> = { en: defaultStrings, fr, fa };
+
+/** The primary subtag, lowercased: `fa-IR` and `FA` both give `fa`. */
+function primary(lang: string | null | undefined): string {
+  return (lang ?? "").toLowerCase().split(/[-_]/)[0] ?? "";
+}
+
+/** The table for a BCP-47 tag, falling back to English rather than to blanks.
+    Split on the tag rather than prefix-matched, so `fao` is Faroese and not
+    Farsi — the bug both site forks of the widget carried. */
+export function stringsFor(lang: string | null | undefined): EditorStrings {
+  return editorLocales[primary(lang)] ?? defaultStrings;
+}
+
+/** The locale table for a language, with a site's overrides on top. The order
+    is the point: a site translating one word into a language the kit already
+    ships keeps the other hundred and twelve. */
+export function editorStrings(
+  lang: string | null | undefined,
+  overrides?: Partial<EditorStrings>
+): EditorStrings {
+  return { ...stringsFor(lang), ...overrides };
+}
+
+/* The right-to-left scripts, which is deliberately a wider list than the three
+   locales above. A site may override the tables into Arabic or Hebrew without
+   the kit shipping either, and a right-to-left language in a left-to-right box
+   is exactly the failure the audit found on nimagiti's Farsi page. Direction
+   is a property of the language, not of whether we happen to have a table. */
+const RTL = new Set(["ar", "fa", "he", "ur", "ps", "sd", "ug", "yi", "dv", "ku"]);
+
+/** `dir` for a language tag. */
+export function dirFor(lang: string | null | undefined): "ltr" | "rtl" {
+  return RTL.has(primary(lang)) ? "rtl" : "ltr";
+}
+
+/** `?lang=` on the panel's URL. */
+export const LANG_PARAM = "lang";
+/** Where the panel remembers the answer, so it is asked once. */
+export const LANG_STORE = "sk-editor-lang";
+
+/** Where the panel's language can come from, in the order it asks.
+    ---------------------------------------------------------------------------
+    The bar does not need this: it reads `<html lang>` off the page the owner is
+    editing, which is right by construction on every site in the fleet. The
+    panel has no such page — one `/edit` route serves both halves of a bilingual
+    site and its document is a hard-coded `lang="en"` — so it has to ask. */
+export interface LangSources {
+  /** `?lang=`, which the bar's links to the panel carry, so an owner who came
+      from `/fa/` arrives in Farsi. */
+  asked?: string | null;
+  /** What the panel remembered last time. */
+  remembered?: string | null;
+  /** `navigator.languages`, in the browser's own order of preference. */
+  preferred?: readonly string[] | null;
+}
+
+/** The first of the sources that names a language the kit ships, or `"en"`.
+    Returns a subtag rather than a table, because the caller has to write it to
+    `<html lang>` and remember it as well as look up words with it.
+
+    A tag the kit does not ship is *skipped*, not accepted: a browser whose
+    first preference is German and whose second is French should get French,
+    not English-because-German-failed. */
+export function resolveEditorLang(sources: LangSources): string {
+  const candidates = [
+    sources.asked,
+    sources.remembered,
+    ...(sources.preferred ?? [])
+  ];
+  for (const candidate of candidates) {
+    const tag = primary(candidate);
+    if (tag && editorLocales[tag]) return tag;
+  }
+  return "en";
+}
 
 /** `fill("Editing {path}", { path: "home.yaml" })`. Absent keys are left as
     they are, so a half-translated string still reads as a template rather

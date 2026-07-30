@@ -128,10 +128,25 @@
   font-family: var(--sk-editor-font, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
   font-size: 0.9375rem;
   line-height: 1.4;
-  /* The bar's own chrome is one language, as the panel's is. Content direction
-     lives on the fields, not here. */
+  /* Amended in 0.17.0. This used to read "the bar's own chrome is one
+     language, as the panel's is", and that was honest when it was written: no
+     site had ever passed a string table because no site reasonably would.
+     0.17.0 ships French and Farsi in the kit, so the chrome speaks the page's
+     language now — and a Farsi bar inside a left-to-right box is a worse
+     failure than an English one.
+
+     The `ltr` default stays rather than moving to a `dir` attribute alone.
+     `:host { all: initial }` resets direction, which is load-bearing: it is
+     what stops a site's own `direction` reaching the owner's controls. An
+     author rule beats the UA rule a bare attribute relies on, so the override
+     below has to be an author rule too. Content direction still lives on the
+     fields, which are `dir="auto"` either way. */
   direction: ltr;
   text-align: start;
+}
+
+.bar[dir="rtl"] {
+  direction: rtl;
 }
 
 .bar__main {

@@ -29,7 +29,15 @@ import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
 import { render, Uploads, type RenderContext } from "./render.js";
 import { editHref, RETURN_PARAM, safeReturnPath } from "./return-to.js";
-import { defaultStrings, fill, type EditorStrings } from "./strings.js";
+import {
+  dirFor,
+  editorStrings,
+  fill,
+  LANG_PARAM,
+  LANG_STORE,
+  resolveEditorLang,
+  type EditorStrings
+} from "./strings.js";
 import { plural } from "./values.js";
 
 export type { EditorStrings } from "./strings.js";
@@ -42,6 +50,9 @@ export interface EditorOptions {
   contentPath?: string;
   /** Overrides for any of the panel's words. */
   strings?: Partial<EditorStrings>;
+  /** Force the panel's language instead of resolving one. A site with a single
+      audience can pin it; nothing in the fleet needs to. */
+  lang?: string;
   /** Google Identity Services' script URL. Overridable for tests; there is no
       reason a site would set it. */
   gisSrc?: string;
@@ -72,13 +83,57 @@ interface EntryBody {
   values: unknown;
 }
 
+/** Which language the panel speaks, and it remembers the answer.
+    ---------------------------------------------------------------------------
+    Asked in the order of how much each source knows about this owner: the link
+    they followed (the bar puts `?lang=` on its route to the panel, so somebody
+    who came from `/fa/` arrives in Farsi), then what they were reading last
+    time, then what their browser asks every site for. Whatever wins is written
+    back, so an owner who arrives once from a Farsi page keeps Farsi when they
+    later open `/edit` on its own.
+
+    Storage is wrapped because private browsing refuses it. A panel that cannot
+    remember a language is worth far more than a panel that will not load. */
+function panelLang(): string {
+  let remembered: string | null = null;
+  try {
+    remembered = localStorage.getItem(LANG_STORE);
+  } catch {
+    /* Nothing remembered, and nothing to do about it. */
+  }
+
+  const lang = resolveEditorLang({
+    asked: new URLSearchParams(location.search).get(LANG_PARAM),
+    remembered,
+    preferred: navigator.languages
+  });
+
+  try {
+    localStorage.setItem(LANG_STORE, lang);
+  } catch {
+    /* Then it is asked again next time, which is the old behaviour. */
+  }
+  return lang;
+}
+
 /** Mounts the panel into `element`, replacing whatever is in it.
     Returns once the first screen — sign-in, or the form — is on the page. */
 export async function mountEditor(element: HTMLElement, options: EditorOptions = {}): Promise<void> {
-  const strings: EditorStrings = { ...defaultStrings, ...options.strings };
+  const lang = options.lang ?? panelLang();
+  const strings: EditorStrings = editorStrings(lang, options.strings);
   const auth = options.authPath ?? "/api/auth";
   const content = options.contentPath ?? "/api/content";
   const gisSrc = options.gisSrc;
+
+  /* The document is told what it turned out to be. `lang` because a screen
+     reader and the browser's own text handling read the attribute rather than
+     our table, and `dir` because the panel's stylesheet is entirely logical
+     properties — so one attribute mirrors the whole layout and there is no
+     right-to-left sheet to maintain. The route ships `lang="en"` statically
+     since a document needs one before any of this runs; this is where it stops
+     being a guess. */
+  document.documentElement.lang = lang;
+  document.documentElement.dir = dirFor(lang);
 
   /* The class is added here rather than asked of the site, so a site's markup
      is `<main data-sk-editor>` and stays correct across kit versions. */
