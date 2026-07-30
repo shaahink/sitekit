@@ -80,13 +80,38 @@ export async function recentChanges(
   );
 
   const seen = new Map<string, Change>();
+  const failures: string[] = [];
   for (const result of settled) {
-    if (result.status !== "fulfilled") continue;
+    if (result.status !== "fulfilled") {
+      failures.push((result.reason as Error)?.message ?? String(result.reason));
+      continue;
+    }
     /* A commit touching two collections arrives twice and is one change. */
     for (const change of result.value) seen.set(change.sha, change);
   }
 
-  return [...seen.values()].sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+  const changes = [...seen.values()].sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+
+  /* An empty list is only safe to hand back if we actually looked everywhere.
+     -----------------------------------------------------------------------
+     This is where session 16's F3 really lived, and reading the code was not
+     enough to find it: `ownerHome` settles this call so it can tell "nothing
+     changed yet" from "we could not look", and both this function and
+     `commitsUnder` below used to answer *both* questions with an empty array.
+     Under the measured GitHub 500 nothing rejected anywhere — the owner was
+     simply told, in an inviting sentence, that they had never changed anything.
+
+     So a failure is only swallowed when something real came back with it: a
+     partial list is true as far as it goes and is worth showing, where an empty
+     one would be a claim about the whole history. GitHub takes one path per
+     request, so a two-collection site can genuinely half-answer. */
+  if (failures.length && !changes.length) {
+    throw new Error(`recent changes unavailable: ${failures.join("; ")}`);
+  }
+  if (failures.length) {
+    console.error("cms history: partial change list —", failures.join("; "));
+  }
+  return changes;
 }
 
 async function commitsUnder(access: RepoAccess, path: string, limit: number): Promise<Change[]> {
@@ -97,7 +122,16 @@ async function commitsUnder(access: RepoAccess, path: string, limit: number): Pr
     token: access.token,
     userAgent: access.userAgent
   });
-  if (!result.ok || !Array.isArray(result.data)) return [];
+  /* Thrown rather than flattened to `[]`, which is the whole of F3's root: a
+     500 and an empty directory are opposite answers and this returned the same
+     value for both. The status travels in the message because it is the only
+     thing that will ever appear in a function log about this. */
+  if (!result.ok) {
+    throw new Error(`commits under ${path}: ${result.status} ${result.text.slice(0, 120)}`);
+  }
+  if (!Array.isArray(result.data)) {
+    throw new Error(`commits under ${path}: expected a list, got ${typeof result.data}`);
+  }
 
   return result.data.map((commit: any) => describe(commit));
 }

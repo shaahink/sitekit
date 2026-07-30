@@ -277,10 +277,29 @@ describe("recentChanges", () => {
   });
 
   it("returns what it can when one path's request fails", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     fetchMock.mockResolvedValueOnce(respond({ message: "Not Found" }, 404));
     fetchMock.mockResolvedValueOnce(respond([OWNER_COMMIT]));
     const changes = await recentChanges(ACCESS, ["src/content/gone", "src/content/pages"]);
     expect(changes).toHaveLength(1);
+    /* Shown because it is true as far as it goes — and logged, because it is
+       still a partial answer to a question asked about a whole history. */
+    expect(errors.mock.calls.flat().join(" ")).toContain("partial change list");
+    errors.mockRestore();
+  });
+
+  /* Session 16's F3, at the root. Both of these used to answer with an empty
+     array, and so did an empty repository — three different situations, one
+     value, and the panel turned that value into "Nothing changed yet. Pick a
+     page below and try something" for an owner with a year of history. */
+  it("refuses to call a failed read an empty history", async () => {
+    fetchMock.mockResolvedValue(respond({ message: "Server Error" }, 500));
+    await expect(recentChanges(ACCESS, ["src/content/pages"])).rejects.toThrow(/unavailable/);
+  });
+
+  it("still calls an empty repository empty", async () => {
+    fetchMock.mockResolvedValue(respond([]));
+    await expect(recentChanges(ACCESS, ["src/content/pages"])).resolves.toEqual([]);
   });
 });
 
@@ -404,6 +423,58 @@ describe("ownerHome", () => {
     const home = await ownerHome(ACCESS, COLLECTIONS, {});
     expect(home.changes[0]?.url).toBe("https://github.com/shaahink/shade-site/commit/4ba488c");
     expect(home.linkable).toBe(true);
+  });
+
+  /* Session 16, F3. Under a measured GitHub outage this handler answered 200
+     with `changes: []` and the panel rendered the empty array as "Nothing
+     changed yet. Pick a page below and try something" — an invitation built out
+     of a false statement about somebody's own site. An empty list cannot carry
+     the difference between "nothing yet" and "we could not look", so the
+     payload does. */
+  it("says the change list was unavailable rather than letting it read as empty", async () => {
+    fetchMock.mockImplementation((input: unknown) => {
+      const url = String(input);
+      if (url.includes("/commits")) return Promise.resolve(respond({ message: "Server Error" }, 500));
+      if (/\/repos\/[^/]+\/[^/]+$/.test(url)) return Promise.resolve(respond({ private: true }));
+      return Promise.resolve(respond({}));
+    });
+    const home = await ownerHome(ACCESS, COLLECTIONS, {});
+    expect(home.changes).toEqual([]);
+    expect(home.unavailable).toEqual(["changes"]);
+  });
+
+  it("says nothing about an unavailable block when every block answered", async () => {
+    answering();
+    const home = await ownerHome(ACCESS, COLLECTIONS, {});
+    /* Absent, not an empty array: the panel guards on the key, and a site with
+       nothing wrong should not carry a field about things being wrong. */
+    expect(home.unavailable).toBeUndefined();
+  });
+
+  /* The other half of F3, and the half nobody would have noticed: `allSettled`
+     throws the reason away unless somebody reads it, so both measured outages
+     left the function log completely empty. An operator could not have known
+     either had happened. */
+  it("logs why a block is missing, because nothing else can", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    fetchMock.mockImplementation((input: unknown) => {
+      const url = String(input);
+      if (url.includes("/api/auth/login")) return Promise.reject(new Error("connect ETIMEDOUT"));
+      if (url.includes("/commits")) return Promise.resolve(respond([OWNER_COMMIT]));
+      if (/\/repos\/[^/]+\/[^/]+$/.test(url)) return Promise.resolve(respond({ private: true }));
+      if (url.includes("/status")) return Promise.resolve(respond({ state: "success", statuses: [] }));
+      return Promise.resolve(respond({}));
+    });
+    const home = await ownerHome(ACCESS, COLLECTIONS, UMAMI, { umamiWebsiteId: "w1" });
+    expect(home.traffic).toBeUndefined();
+    expect(home.unavailable).toEqual(["traffic"]);
+    const logged = errors.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(logged).toContain("traffic unavailable");
+    expect(logged).toContain("ETIMEDOUT");
+    /* The change list still arrived. Failure isolation is the design; the log
+       is what makes it observable rather than merely silent. */
+    expect(home.changes).toHaveLength(1);
+    errors.mockRestore();
   });
 
   it("treats a repository it could not ask about as not linkable", async () => {

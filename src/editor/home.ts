@@ -64,6 +64,10 @@ export interface HomeData {
     pages?: Array<{ path: string; views: number }>;
   };
   shareUrl?: string;
+  /** Blocks the handler could not read. See OwnerHome.unavailable — an empty
+      `changes` means "nothing yet" *or* "GitHub didn't answer", and only one of
+      those is an invitation to go and try something. */
+  unavailable?: string[];
   /** Whether a github.com link works for whoever is reading this. False on a
       private repository, where every such link is a "Page not found" for an
       owner who signed in with Google. Absent counts as false: an offer that
@@ -256,6 +260,15 @@ function changesBlock(strings: EditorStrings, data: HomeData): HTMLElement | nul
   block.append(el("h3", "sk-editor__blocktitle", strings.homeChangesTitle));
 
   if (!changes.length) {
+    /* Two opposite things arrive here as the same empty array, and the payload
+       is the only thing that can tell them apart. Under a measured GitHub
+       outage this block said "Nothing changed yet. Pick a page below and try
+       something" to an owner with a year of history — an invitation built out
+       of a false statement about their own site. */
+    if (data.unavailable?.includes("changes")) {
+      block.append(el("p", "sk-editor__empty", strings.homeChangesUnavailable));
+      return block;
+    }
     /* The state a site is in on the day it launches, and the one an owner is
        most likely to see first. It should read as an invitation. */
     block.append(el("p", "sk-editor__empty", strings.homeChangesNone));

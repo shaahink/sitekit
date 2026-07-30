@@ -37,6 +37,20 @@ export interface OwnerHome {
       on every private repository, which is all four client sites — the editor
       uses it to decide whether to offer a link to a filed request. */
   linkable: boolean;
+  /** Blocks that could not be read, as opposed to blocks with nothing in them.
+
+      The distinction is the whole of it. `changes: []` means one of two
+      opposite things — nothing has been changed yet, or GitHub did not answer —
+      and the panel said the first one out loud during a measured GitHub outage:
+      "Nothing changed yet. Pick a page below and try something." Telling an
+      owner something false about their own history is the failure; an empty
+      array cannot carry the difference, so this does.
+
+      Named per block rather than as one flag, because the panel treats them
+      differently on purpose: it says so for the change list and stays quiet
+      about traffic, which is 7.7's rule that an owner who came to fix a typo is
+      not shown an analytics outage. */
+  unavailable?: Array<"changes" | "traffic">;
 }
 
 /* A change with no link left on it. The panel guards on the url being present,
@@ -94,6 +108,27 @@ export async function ownerHome(
     repoIsPublic(access)
   ]);
 
+  /* Every rejection is logged, and that is a fix rather than housekeeping.
+     `allSettled` discards the reason unless somebody reads it, so a measured
+     GitHub outage and a measured analytics outage both left the function log
+     completely empty — the block was invisible on screen by design and
+     invisible to an operator by omission, which is how "nobody watches /admin
+     at 3am" becomes "nobody could have known". */
+  const failed = (block: string, result: PromiseSettledResult<unknown>): boolean => {
+    if (result.status !== "rejected") return false;
+    console.error(`cms home: ${block} unavailable:`, (result.reason as Error)?.message ?? result.reason);
+    return true;
+  };
+
+  const unavailable: Array<"changes" | "traffic"> = [];
+  if (failed("changes", changesResult)) unavailable.push("changes");
+  if (failed("traffic", trafficResult)) unavailable.push("traffic");
+  /* Not owner-visible: a repository we could not classify is treated as
+     private, which is the safe answer and removes a link rather than adding a
+     wrong one. Still logged — it is the one of the three whose failure is
+     silent *by design*, so the log is the only place it can be seen. */
+  failed("repo visibility", publicResult);
+
   const traffic = trafficResult.status === "fulfilled" ? trafficResult.value : undefined;
   /* A commit link the owner cannot open is worse than no link: "See exactly
      what changed" is the promise they are most nervous about, and on every
@@ -104,14 +139,17 @@ export async function ownerHome(
     (change) => (linkable ? change : withoutUrl(change))
   );
 
-  const home: OwnerHome = { changes, linkable };
+  const home: OwnerHome = { changes, linkable, ...(unavailable.length ? { unavailable } : {}) };
 
   const newest = changes[0];
   if (newest) {
     /* Only the newest. An owner asking "is it live yet?" means their last
        change; the deploy state of the one before is archaeology, and it is
        four more requests to answer a question nobody asked. */
-    const state = await deployState(access, newest.sha).catch(() => undefined);
+    const state = await deployState(access, newest.sha).catch((error: Error) => {
+      console.error("cms home: deploy state unavailable:", error?.message ?? error);
+      return undefined;
+    });
     if (state && state.state !== "unknown") home.deploy = state;
   }
 

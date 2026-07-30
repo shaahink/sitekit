@@ -70,6 +70,12 @@ export interface EditorStrings {
 
   loadFailed: string;
   saveFailed: string;
+  /** A save that never reached the site at all — a dropped connection, a phone
+      that lost its signal mid-tap. Distinct from every other failure because
+      the server never had an opinion, so the only useful sentence is about
+      where the owner's words are and what not to do next. Measured: without
+      this the button read "Saving…" and stayed disabled forever. */
+  saveUnreachable: string;
   invalid: string;
   conflict: string;
   reload: string;
@@ -174,6 +180,10 @@ export interface EditorStrings {
 
   homeChangesTitle: string;
   homeChangesNone: string;
+  /** When the change list could not be read at all — distinct from an empty
+      one, which is an invitation. Said out loud because the alternative is
+      telling an owner with a year of history that nothing has ever changed. */
+  homeChangesUnavailable: string;
   homeChangeDetail: string;
   /** `{who}` — the person the editor recorded on the commit. */
   homeChangeBy: string;
@@ -253,6 +263,8 @@ export const defaultStrings: EditorStrings = {
 
   loadFailed: "Couldn't load that content.",
   saveFailed: "Couldn't save that change.",
+  saveUnreachable:
+    "Couldn't reach the site to save that. Everything you typed is still here — check your connection and press Save again. Don't reload this page yet.",
   invalid: "That change doesn't fit the content model.",
   conflict: "Someone else edited this since you opened it — reload and try again.",
   reload: "Reload",
@@ -337,6 +349,8 @@ export const defaultStrings: EditorStrings = {
      the heading no longer claims they are all the reader's. */
   homeChangesTitle: "What changed",
   homeChangesNone: "Nothing changed yet. Pick a page below and try something — you can always put it back.",
+  homeChangesUnavailable:
+    "Couldn't read your recent changes just now. Your site is fine and so are your words — this list should be back in a minute.",
   homeChangeDetail: "See exactly what changed",
   homeChangeBy: "by {who}",
   /* A commit the editor did not write is one of ours. Saying "by sk" is both
