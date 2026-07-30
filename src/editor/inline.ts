@@ -26,9 +26,9 @@
 import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
 import { clearDraft, draftKey, readDraft, saveDraft, type Draft } from "./drafts.js";
-import { Bar } from "./inline-bar.js";
+import { Bar, type SaveState } from "./inline-bar.js";
 import { signInHref } from "./return-to.js";
-import { dirFor, editorStrings, fill, type EditorStrings } from "./strings.js";
+import { digitsFor, dirFor, editorStrings, fill, type EditorStrings } from "./strings.js";
 import { coerce, findField, plural, valueAt } from "./values.js";
 
 export interface InlineOptions {
@@ -106,6 +106,9 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
      and for the same reason. */
   const lang = options.lang ?? document.documentElement.lang;
   const strings: EditorStrings = editorStrings(lang, options.strings);
+  /* Persian counts are Persian digits. Resolved once here rather than at every
+      call site, because the bar asks on every keystroke. */
+  const digits = digitsFor(lang);
   const contentPath = options.contentPath ?? "/api/content";
   const cssHref = options.cssHref ?? "/editor-inline.css";
 
@@ -141,6 +144,8 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     discard: strings.inlineDiscard,
     help: strings.inlineHelp,
     helpTitle: strings.inlineHelpTitle,
+    more: strings.inlineMore,
+    moreTitle: strings.inlineMoreTitle,
     done: strings.inlineDone,
     helpEdit: strings.inlineHelpEdit,
     helpCancel: strings.inlineHelpCancel,
@@ -294,7 +299,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     clearDraft(sessionStorage, key);
     bar.setNote(strings.inlineDraftStale, { tone: "bad" });
   } else if (verdict.state === "usable") {
-    const count = plural(verdict.draft.edits.length, strings.change, strings.changes);
+    const count = plural(verdict.draft.edits.length, strings.change, strings.changes, digits);
     bar.setNote(fill(strings.inlineDraftFound, { count }), {
       actions: [
         { label: strings.inlineDraftRestore, run: () => restore(verdict.draft) },
@@ -520,7 +525,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
        flag is what makes a second call impossible rather than unlikely. */
     if (saving || !dirty.size) return;
     saving = true;
-    bar.setSave(strings.saving, false);
+    bar.setSave(saveState(strings.saving, false));
     bar.clearNote();
     for (const { element } of editables.values()) delete element.dataset.skEditIssue;
 
@@ -619,16 +624,29 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     if (document.activeElement && (document.activeElement as HTMLElement).dataset?.skEdit) {
       /* Focus owns the status line; leave it saying what is being changed. */
     } else if (count) {
-      const phrase = plural(count, strings.change, strings.changes);
+      const phrase = plural(count, strings.change, strings.changes, digits);
       bar.setStatus(fill(strings.inlinePending, { count: phrase }), phrase);
     } else {
       bar.setStatus(strings.inlineIdle);
     }
-    bar.setSave(
-      count ? fill(strings.saveCount, { count: plural(count, strings.change, strings.changes) }) : strings.save,
-      count > 0 && !saving
-    );
-    bar.setDiscardVisible(count > 0);
+    bar.setSave(saveState(strings.save, count > 0 && !saving));
+  }
+
+  /** Save as the bar needs it: the verb on the button, the count on its chip,
+      and the whole sentence for anyone listening rather than looking. A count
+      of zero is what takes the button off the bar (§2.2), so this is also where
+      the resting shape comes from — one place, one arithmetic. */
+  function saveState(label: string, enabled: boolean): SaveState {
+    const count = dirty.size;
+    return {
+      label,
+      count,
+      chip: count ? digits(count) : "",
+      sentence: count
+        ? fill(strings.saveCount, { count: plural(count, strings.change, strings.changes, digits) })
+        : label,
+      enabled
+    };
   }
 
   /** The panel, told which page to send them back to. The hash goes along:
@@ -640,8 +658,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
   function idle(text: string): void {
     bar.setStatus(text);
-    bar.setSave(strings.save, false);
-    bar.setDiscardVisible(false);
+    bar.setSave(saveState(strings.save, false));
     bar.setRevertVisible(false);
   }
 

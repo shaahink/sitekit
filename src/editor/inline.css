@@ -180,22 +180,40 @@
   gap: 0.4rem;
 }
 
-/* Mobile first, and the two shapes are deliberately different.
-
-   On a phone Save takes a row of its own, full width: it is the only control
-   an owner reaches for with certainty, and a thumb should not have to aim. The
-   undo controls sit above it rather than beside it, so a mis-tap costs a tap
-   rather than an afternoon's typing. */
 .bar__spacer {
   display: none;
 }
 
+/* Amended in 0.17.0, and the old rule was `.btn--primary { flex: 1 1 100% }`
+   with a paragraph about how a thumb should not have to aim at Save.
+
+   The reasoning was sound and the measurement contradicted its cost. Full width
+   inside a wrapping `.bar__actions` does not widen Save, it moves it to a row
+   of its own: three rows on a phone, 143px, 17% of the screen and 28% of what
+   is left once a keyboard is up — for a button that at rest was *disabled*
+   (§1.5, §2.2). Save is no longer rendered at all until there is something to
+   save, and when it is rendered it shares the row with one undo and the
+   overflow sheet. Two rows, 93px. The 44px floor every button already has is
+   what a thumb actually needs; the row was never buying that. */
 .btn--primary {
-  flex: 1 1 100%;
+  flex: 0 1 auto;
 }
 
-/* Once there is room, everything shares one line and Save returns to the end
-   of it — the same place the panel puts it. */
+/* The count, inside Save. Tabular figures because it is a number that changes
+   under the reader's eye and must not shift the button's width as it does. */
+.bar__count {
+  display: inline-block;
+  margin-inline-start: 0.4rem;
+  padding-inline: 0.35rem;
+  border-radius: 4px;
+  background: rgba(13, 16, 22, 0.28);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Once there is room, everything shares one line — which is what the phone bar
+   now does too, so this block is down to the two rules that are genuinely about
+   width: the status line stops claiming a row of its own, and the spacer
+   appears to push the controls to the end. Desktop is 65px before and after. */
 @media (min-width: 34rem) {
   .bar__status {
     flex: 1 1 auto;
@@ -206,9 +224,6 @@
   .bar__spacer {
     display: block;
     flex: 1 1 auto;
-  }
-  .btn--primary {
-    flex: 0 0 auto;
   }
 }
 
@@ -275,6 +290,36 @@ button:disabled {
   font-weight: 700;
 }
 
+/* ── The overflow sheet ─────────────────────────────────────────────────── */
+
+/* What is not the job in hand while an owner is mid-edit: undo everything, how
+   this works, the way out. Nothing was removed from the bar to get it to two
+   rows — the rare controls moved here.
+
+   A column of full-width rows rather than a row of small ones. This opens under
+   a thumb on a phone, and two of the three things in it are the ones an owner
+   would least like to hit by accident. */
+.bar__sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-block-end: 0.5rem;
+  padding-block-end: 0.5rem;
+  border-block-end: 1px solid var(--sk-editor-line-soft, rgba(231, 232, 236, 0.07));
+}
+
+.btn--sheet {
+  inline-size: 100%;
+  text-align: start;
+  border-color: transparent;
+  color: var(--sk-editor-dim, rgba(231, 232, 236, 0.68));
+}
+
+.btn--sheet:hover:not(:disabled) {
+  color: var(--sk-editor-ink, #e7e8ec);
+  border-color: var(--sk-editor-accent, #6f93c9);
+}
+
 /* ── States the bar reports ─────────────────────────────────────────────── */
 
 .bar__note {
@@ -298,12 +343,24 @@ button:disabled {
   color: var(--sk-editor-accent-lit, #8fb0e0);
 }
 
+/* Bounded since 0.17.0, and the bound is the whole point. Six lines of prose
+   may be six lines; they are not allowed to be half of somebody's phone. Help
+   open measured 400px — 47.4% of a 390×844 screen — and this brings it to 293px
+   without dropping a word (§2.2). `overscroll-behavior` so scrolling to the end
+   of the help does not then scroll the page underneath it, which on a phone
+   reads as the page jumping while an owner reads.
+
+   The bound is proportional, so it cannot fix the keyboard-up case alone — that
+   is why opening help blurs the focused field (`inline-bar.ts`, `toggleHelp`). */
 .bar__help {
   margin: 0.5rem 0 0;
   padding-block-start: 0.5rem;
   border-block-start: 1px solid var(--sk-editor-line-soft, rgba(231, 232, 236, 0.07));
   font-size: 0.875rem;
   color: var(--sk-editor-dim, rgba(231, 232, 236, 0.68));
+  max-block-size: min(32vh, 12rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .bar__help ul {

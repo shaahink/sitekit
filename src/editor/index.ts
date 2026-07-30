@@ -30,6 +30,7 @@ import { home, type HomeData } from "./home.js";
 import { render, Uploads, type RenderContext } from "./render.js";
 import { editHref, RETURN_PARAM, safeReturnPath } from "./return-to.js";
 import {
+  digitsFor,
   dirFor,
   editorStrings,
   fill,
@@ -422,7 +423,7 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
         save.disabled = dirty.size === 0 || undescribed.length > 0;
         save.textContent = dirty.size
           ? fill(strings.saveCount, {
-              count: plural(dirty.size, strings.change, strings.changes)
+              count: plural(dirty.size, strings.change, strings.changes, digitsFor(lang))
             })
           : strings.save;
         if (undescribed.length) {

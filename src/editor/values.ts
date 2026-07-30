@@ -135,9 +135,21 @@ export function coerce(field: Field, raw: string | boolean): unknown {
 
 /** "1 change" / "2 changes", with both words supplied so it can be
     translated. English-shaped pluralisation, which is as far as the panel's
-    copy needs to go today. */
-export function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
+    copy needs to go today — and Persian needs less, not more: it does not
+    pluralise a noun after a numeral, so its table gives the same word twice
+    and this picks it either way.
+
+    `digits` is how the number is written. It defaults to `String`, so a caller
+    that has no locale to hand still gets a sentence rather than nothing; the
+    editor passes `digitsFor(lang)`, because "2 تغییر" is a half-translation
+    and reads worse than the English it replaced. */
+export function plural(
+  n: number,
+  one: string,
+  many: string,
+  digits: (n: number) => string = String
+): string {
+  return `${digits(n)} ${n === 1 ? one : many}`;
 }
 
 /** A path that is safe in an id attribute and a CSS selector. */

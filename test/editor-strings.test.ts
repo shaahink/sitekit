@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultStrings,
+  digitsFor,
   dirFor,
   editorLocales,
   editorStrings,
@@ -28,6 +29,7 @@ import {
   stringsFor,
   type EditorStrings
 } from "../src/editor/strings.js";
+import { plural } from "../src/editor/values.js";
 
 const keys = Object.keys(defaultStrings) as (keyof EditorStrings)[];
 const translated = Object.entries(editorLocales).filter(([locale]) => locale !== "en");
@@ -35,7 +37,14 @@ const translated = Object.entries(editorLocales).filter(([locale]) => locale !==
 /* Strings that are the same in every language because they are not language.
    "?" is a glyph; `homePageLine` is a path, an em dash and a number. Anything
    added here needs a reason of that kind. */
-const NOT_LANGUAGE: (keyof EditorStrings)[] = ["inlineHelp", "homeHelp", "homePageLine"];
+const NOT_LANGUAGE: (keyof EditorStrings)[] = [
+  "inlineHelp",
+  /* The overflow glyph, for the same reason as "?" — and its *name*,
+     `inlineMoreTitle`, is what the three tables translate. */
+  "inlineMore",
+  "homeHelp",
+  "homePageLine"
+];
 
 /* Every `{placeholder}` the English table uses, by key: a translation that
    drops one leaves an owner reading a sentence with a hole in it, and one that
@@ -177,6 +186,77 @@ describe("dirFor", () => {
     expect(dirFor("ar")).toBe("rtl");
     expect(dirFor("he-IL")).toBe("rtl");
     expect(stringsFor("ar")).toBe(defaultStrings);
+  });
+});
+
+/* Step 1 of 0.17.0 shipped the Farsi table and left the numbers Latin: an owner
+   read "2 تغییر", which is the half-translation the whole exercise was against.
+   Step 2 paid it, and these are the assertions that keep it paid. */
+describe("digitsFor", () => {
+  it("writes a Persian count in Persian digits", () => {
+    expect(digitsFor("fa")(2)).toBe("۲");
+    expect(digitsFor("fa-IR")(12)).toBe("۱۲");
+  });
+
+  it("leaves the Latin-digit languages alone", () => {
+    expect(digitsFor("en")(2)).toBe("2");
+    expect(digitsFor("fr")(2)).toBe("2");
+  });
+
+  /* Wider than the tables, like `dirFor`: a site may override the strings into
+     a language the kit does not ship and its numbers should follow. */
+  it("knows a digit set the kit has no table for", () => {
+    expect(digitsFor("ar-EG")(2)).toBe("٢");
+    expect(digitsFor("ps")(2)).toBe("۲");
+  });
+
+  /* Measured, and it is why this function does not truncate the tag the way
+     `stringsFor` must. CLDR's default numbering system belongs to the locale:
+     bare `ar` is Latin and `ar-EG` is Arabic-Indic, bare `ur` is Latin and
+     `ur-IN` is Persian. Cutting `ar-EG` down to `ar` would print the wrong
+     digits for Egypt while looking like a tidy-up. */
+  it("keeps the region, because the region is what decides the digits", () => {
+    expect(digitsFor("ar")(2)).toBe("2");
+    expect(digitsFor("ar-EG")(2)).toBe("٢");
+    expect(digitsFor("ur")(2)).toBe("2");
+    expect(digitsFor("ur-IN")(2)).toBe("۲");
+  });
+
+  it("takes the tag as a site's markup actually spells it", () => {
+    expect(digitsFor("FA-IR")(2)).toBe("۲");
+    expect(digitsFor("fa_IR")(2)).toBe("۲");
+    expect(digitsFor(" fa ")(2)).toBe("۲");
+  });
+
+  it("costs Latin digits rather than the editor when the tag is nonsense", () => {
+    expect(digitsFor("!!")(2)).toBe("2");
+    expect(digitsFor("")(2)).toBe("2");
+    expect(digitsFor(null)(2)).toBe("2");
+  });
+
+  it("hands back the same formatter twice — the bar asks on every keystroke", () => {
+    expect(digitsFor("fa")).toBe(digitsFor("fa"));
+  });
+});
+
+describe("plural, with the digits the language uses", () => {
+  it("puts a Persian numeral in front of the un-pluralised noun", () => {
+    const fa = editorLocales.fa!;
+    expect(plural(2, fa.change, fa.changes, digitsFor("fa"))).toBe(`۲ ${fa.change}`);
+    expect(plural(1, fa.change, fa.changes, digitsFor("fa"))).toBe(`۱ ${fa.change}`);
+  });
+
+  it("still pluralises where the language does", () => {
+    expect(plural(1, "change", "changes", digitsFor("en"))).toBe("1 change");
+    expect(plural(2, "change", "changes", digitsFor("en"))).toBe("2 changes");
+    expect(plural(2, "modification", "modifications", digitsFor("fr"))).toBe("2 modifications");
+  });
+
+  /* The default matters: `plural` is called from the panel, the bar and the
+     drafts note, and a caller that forgets the formatter must still produce a
+     sentence. */
+  it("writes Latin digits when nobody says otherwise", () => {
+    expect(plural(2, "change", "changes")).toBe("2 changes");
   });
 });
 

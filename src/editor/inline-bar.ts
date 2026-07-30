@@ -32,6 +32,31 @@ export interface NoteAction {
   run(): void;
 }
 
+/** Save, and how much of it there is.
+    -------------------------------------------------------------------------
+    `count` is the whole of the bar's shape: zero means there is nothing to
+    save, and the button is not rendered at all rather than rendered disabled.
+    §2.2 measured what a disabled Save costs on a phone — `flex: 1 1 100%` put
+    it on a row of its own, 44px of a 143px bar, to offer a control that does
+    nothing. `inline-bar.ts` has said "a control that does nothing is worse
+    than one that is not there" about the undo buttons since 0.8.0; this is
+    that rule reaching the one control it was never applied to.
+
+    `label` and `chip` are separate because the label has to survive
+    translation on a single row. "Save 1 change" is 117px in English and
+    *"Enregistrer 1 modification"* does not fit at all, so the button says the
+    verb and the number rides beside it — with `sentence` as what a screen
+    reader hears instead, which is still the whole sentence. */
+export interface SaveState {
+  label: string;
+  count: number;
+  /** The count as this language writes it: `۲`, not `2`. */
+  chip?: string;
+  /** The `aria-label`: "Save 2 changes", unabbreviated. */
+  sentence?: string;
+  enabled: boolean;
+}
+
 export class Bar {
   private readonly host: HTMLElement;
   private readonly root: ShadowRoot;
@@ -46,10 +71,24 @@ export class Bar {
   private readonly help: HTMLElement;
   private readonly helpLines: { wrap: HTMLElement; list: HTMLElement };
   private readonly saveButton: HTMLButtonElement;
+  private readonly saveCount: HTMLElement;
   private readonly revertButton: HTMLButtonElement;
-  private readonly discardButton: HTMLButtonElement;
   private readonly helpButton: HTMLButtonElement;
   private readonly exitButton: HTMLButtonElement;
+  private readonly moreButton: HTMLButtonElement;
+  private readonly actions: HTMLElement;
+  private readonly spacer: HTMLElement;
+  /** The overflow sheet: what is not the job in hand while an owner is mid-edit
+      — undo everything, how this works, and the way out. */
+  private readonly sheet: HTMLElement;
+  /** How many changes are waiting. The bar's shape follows this and nothing
+      else, so there is one place to read the answer from. */
+  private pending = 0;
+  private revertShown = false;
+  /** Which control set is currently in the DOM, so a keystroke that changes
+      nothing about the shape does not re-append the row — moving a focused
+      button would blur it. */
+  private shape = "";
 
   constructor(cssHref: string, strings: BarStrings, dir: "ltr" | "rtl", buttons: BarButtons) {
     /* A custom element name rather than a div: it cannot collide with a site's
@@ -84,36 +123,48 @@ export class Bar {
     this.status.className = "bar__status";
     this.status.setAttribute("aria-live", "polite");
 
-    const actions = document.createElement("div");
-    actions.className = "bar__actions";
+    this.actions = document.createElement("div");
+    this.actions.className = "bar__actions";
 
     this.pageSheet = document.createElement("link");
     this.pageSheet.rel = "stylesheet";
     this.pageSheet.href = cssHref;
     document.head.append(this.pageSheet);
 
-    /* Both start hidden: at rest there is nothing to undo, and a control that
-       does nothing is worse than one that is not there. */
     this.revertButton = button("btn--quiet", strings.revert, buttons.revert);
-    this.revertButton.hidden = true;
-    this.discardButton = button("btn--quiet", strings.discard, buttons.discard);
-    this.discardButton.hidden = true;
     this.helpButton = button("btn--icon", strings.help, () => this.toggleHelp());
     this.helpButton.setAttribute("aria-label", strings.helpTitle);
     this.helpButton.setAttribute("aria-expanded", "false");
     this.exitButton = button("", strings.done, buttons.exit);
     this.saveButton = button("btn--primary", strings.save, buttons.save);
+    /* Inside the button rather than beside it, so the count travels with the
+       thing it is a count of and a thumb aiming at either hits Save. */
+    this.saveCount = document.createElement("span");
+    this.saveCount.className = "bar__count";
+    /* The sentence in `aria-label` already carries the number, so hearing it
+       twice would be the accessible version of stuttering. */
+    this.saveCount.setAttribute("aria-hidden", "true");
 
-    const spacer = document.createElement("span");
-    spacer.className = "bar__spacer";
+    this.moreButton = button("btn--icon", strings.more, () => this.toggleSheet());
+    this.moreButton.setAttribute("aria-label", strings.moreTitle);
+    this.moreButton.setAttribute("aria-expanded", "false");
+    this.moreButton.setAttribute("aria-haspopup", "true");
 
-    actions.append(
-      this.revertButton,
-      this.discardButton,
-      spacer,
-      this.helpButton,
-      this.exitButton,
-      this.saveButton
+    this.spacer = document.createElement("span");
+    this.spacer.className = "bar__spacer";
+
+    /* Nothing is removed from the bar by §2.2 — the rare controls move here.
+       Full-width rows rather than a row of small ones: this opens on a phone,
+       and the sheet is where the two irreversible-feeling things live. */
+    this.sheet = document.createElement("div");
+    this.sheet.className = "bar__sheet";
+    this.sheet.hidden = true;
+    this.sheet.setAttribute("role", "group");
+    this.sheet.setAttribute("aria-label", strings.moreTitle);
+    this.sheet.append(
+      this.sheetItem(strings.discard, buttons.discard),
+      this.sheetItem(strings.helpTitle, () => this.toggleHelp()),
+      this.sheetItem(strings.done, buttons.exit)
     );
 
     this.note = document.createElement("p");
@@ -128,11 +179,26 @@ export class Bar {
 
     const main = document.createElement("div");
     main.className = "bar__main";
-    main.append(this.status, actions);
-    this.bar.append(main, this.note, this.help);
+    main.append(this.status, this.actions);
+    /* The sheet rises out of the bar rather than dropping out of it: there is
+       nothing below the bar but the edge of the screen. */
+    this.bar.append(this.sheet, main, this.note, this.help);
     this.root.append(sheet, this.bar);
     document.body.append(this.host);
 
+    /* Escape closes the sheet rather than leaving edit mode. The editable
+       elements have their own Escape — that one reverts a field — and this
+       listener never sees those, because an open sheet means the caret is not
+       in the page. */
+    this.bar.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !this.sheet.hidden) {
+        event.preventDefault();
+        this.closeSheet();
+        this.moreButton.focus();
+      }
+    });
+
+    this.layout();
     this.followKeyboard();
   }
 
@@ -153,9 +219,16 @@ export class Bar {
     this.status.append(before ?? "", strong, rest.join(what));
   }
 
-  setSave(label: string, enabled: boolean): void {
-    this.saveButton.textContent = label;
-    this.saveButton.disabled = !enabled;
+  setSave(state: SaveState): void {
+    this.saveButton.textContent = state.label;
+    this.saveButton.disabled = !state.enabled;
+    this.saveButton.setAttribute("aria-label", state.sentence ?? state.label);
+    if (state.chip) {
+      this.saveCount.textContent = state.chip;
+      this.saveButton.append(this.saveCount);
+    }
+    this.pending = state.count;
+    this.layout();
   }
 
   /** One more line of help, added once the page's own content model is known.
@@ -172,11 +245,69 @@ export class Bar {
   }
 
   setRevertVisible(visible: boolean): void {
-    this.revertButton.hidden = !visible;
+    this.revertShown = visible;
+    this.layout();
   }
 
-  setDiscardVisible(visible: boolean): void {
-    this.discardButton.hidden = !visible;
+  /* --- which controls, and how many rows ---------------------------------- */
+
+  /** The bar shows the controls for the state it is in, and §2.2 measured why
+      it has to: the five controls of a typing bar total ~465px against 350px
+      of usable width at 390. A fixed set is not a choice this bar has.
+
+      Two sets, and the boundary between them is whether there is anything to
+      save:
+
+          at rest    [status                              ]
+                     [                        ?      Done ]
+
+          typing     [Changing Eyebrow                    ]
+                     [Undo this one       Save ②       ▾  ]
+
+      Two rows either way, where today's bar is three. */
+  private layout(): void {
+    const editing = this.pending > 0;
+    const shape = `${editing ? "edit" : "rest"}:${this.revertShown}`;
+    if (shape === this.shape) return;
+    this.shape = shape;
+    /* The sheet belongs to the editing set. When the last change is saved or
+       undone the button holding it open has gone, so the sheet goes with it. */
+    if (!editing) this.closeSheet();
+    this.actions.replaceChildren(
+      ...(editing
+        ? [
+            ...(this.revertShown ? [this.revertButton] : []),
+            this.spacer,
+            this.saveButton,
+            this.moreButton
+          ]
+        : [this.spacer, this.helpButton, this.exitButton])
+    );
+  }
+
+  private toggleSheet(): void {
+    if (this.sheet.hidden) this.openSheet();
+    else this.closeSheet();
+  }
+
+  private openSheet(): void {
+    this.sheet.hidden = false;
+    this.moreButton.setAttribute("aria-expanded", "true");
+  }
+
+  private closeSheet(): void {
+    this.sheet.hidden = true;
+    this.moreButton.setAttribute("aria-expanded", "false");
+  }
+
+  /** A row in the sheet. Every one of them closes it: they are all either
+      one-shot actions or a surface of their own, and a sheet left open over the
+      page it just changed is a second thing to dismiss. */
+  private sheetItem(label: string, run: () => void): HTMLButtonElement {
+    return button("btn--sheet", label, () => {
+      this.closeSheet();
+      run();
+    });
   }
 
   /** A line under the controls: an error, a confirmation, or a question with
@@ -207,6 +338,17 @@ export class Bar {
   }
 
   private toggleHelp(): void {
+    /* Opening help puts the caret down first, and this is load-bearing rather
+       than tidy. Help is bounded at `min(32vh, 12rem)` (§2.2), but the bound is
+       proportional: with a keyboard up the viewport is 508px and even the
+       bounded help is half of it. Blurring retracts the keyboard, which makes
+       that state unreachable in practice instead of merely smaller. Chrome
+       blurs on a button press anyway; iOS Safari does not focus buttons on tap
+       at all, which is exactly the phone this matters on. */
+    if (this.help.hidden) {
+      const active = document.activeElement as HTMLElement | null;
+      if (active?.isContentEditable) active.blur();
+    }
     this.help.hidden = !this.help.hidden;
     this.helpButton.setAttribute("aria-expanded", String(!this.help.hidden));
   }
@@ -246,6 +388,8 @@ export interface BarStrings {
   discard: string;
   help: string;
   helpTitle: string;
+  more: string;
+  moreTitle: string;
   done: string;
   helpEdit: string;
   helpCancel: string;

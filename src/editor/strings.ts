@@ -135,6 +135,14 @@ export interface EditorStrings {
   inlineDiscard: string;
   inlineHelp: string;
   inlineHelpTitle: string;
+  /** The overflow affordance, as a glyph — the counterpart of `inlineHelp`'s
+      "?" and hidden from a screen reader the same way, by `inlineMoreTitle`.
+      A fixed control set does not fit 390px in three languages (§2.2), so the
+      rare controls live behind this while an owner is mid-edit. */
+  inlineMore: string;
+  /** What the overflow button is called. The widget's own word for the same
+      idea, so the two surfaces this kit ships do not invent two. */
+  inlineMoreTitle: string;
   inlineHelpEdit: string;
   inlineHelpCancel: string;
   inlineHelpSave: string;
@@ -310,6 +318,8 @@ export const defaultStrings: EditorStrings = {
   inlineDiscard: "Undo everything",
   inlineHelp: "?",
   inlineHelpTitle: "How this works",
+  inlineMore: "▾",
+  inlineMoreTitle: "More",
   inlineHelpEdit: "Tap highlighted text and type. Nothing is public until you press Save.",
   inlineHelpCancel: "Press Escape, or “Undo this one”, to put a piece of text back as it was.",
   inlineHelpSave: "Save sends everything you changed at once. The page updates a minute or so later.",
@@ -483,6 +493,8 @@ const fr: EditorStrings = {
   inlineDiscard: "Tout annuler",
   inlineHelp: "?",
   inlineHelpTitle: "Comment ça marche",
+  inlineMore: "▾",
+  inlineMoreTitle: "Plus",
   inlineHelpEdit:
     "Touchez un texte surligné et écrivez. Rien n’est public tant que vous n’appuyez pas sur Enregistrer.",
   inlineHelpCancel:
@@ -567,10 +579,11 @@ const fr: EditorStrings = {
     what a Persian reader expects and "۲ تغییرها" is wrong. `plural()` puts the
     number in front of whichever it picks, so both keys must be the singular.
 
-    What this table does *not* yet do is shape the numbers themselves — a count
-    still arrives as `2` rather than `۲`, because the digits come from
-    `plural()` and not from here. Left for the bar's rebuild, which is where
-    the count becomes a chip of its own. */
+    The numbers are not shaped here and never will be: a table cannot hold a
+    count it has never seen. Step 1 of 0.17.0 shipped this table with Latin
+    digits inside Persian sentences for exactly that reason, and step 2 paid it
+    with `digitsFor` — `plural()` and the bar's count chip both take a
+    formatter now, so "۲ تغییر" is what an owner reads. */
 const fa: EditorStrings = {
   loading: "در حال بارگذاری…",
   notConfigured: "ویرایشگر هنوز برای این سایت تنظیم نشده. خود سایت هیچ مشکلی ندارد.",
@@ -645,6 +658,8 @@ const fa: EditorStrings = {
   inlineDiscard: "همه را برگردان",
   inlineHelp: "?",
   inlineHelpTitle: "این چطور کار می‌کند",
+  inlineMore: "▾",
+  inlineMoreTitle: "بیشتر",
   inlineHelpEdit: "روی متن هایلایت‌شده بزن و بنویس. تا ذخیره را نزنی هیچ‌چیز عمومی نمی‌شود.",
   inlineHelpCancel:
     "برای اینکه یک متن به حالت اولش برگردد، Escape را بزن یا «همین یکی را برگردان».",
@@ -753,6 +768,46 @@ const RTL = new Set(["ar", "fa", "he", "ur", "ps", "sd", "ug", "yi", "dv", "ku"]
 /** `dir` for a language tag. */
 export function dirFor(lang: string | null | undefined): "ltr" | "rtl" {
   return RTL.has(primary(lang)) ? "rtl" : "ltr";
+}
+
+/** Numbers as the language writes them.
+    -------------------------------------------------------------------------
+    0.17.0's step 1 shipped Farsi words with Latin digits — "۲ تغییر" arrived as
+    "2 تغییر", because the count came from `plural()` and a table cannot hold a
+    number it has never seen. This is the fix, and it is `Intl` rather than a
+    digit map for the same reason `dirFor` is a set of languages rather than a
+    per-table flag: the digit set belongs to the language, not to whether the
+    kit happens to have words for it. A site that overrides the tables into
+    Arabic gets ٢ without asking.
+
+    This is the one place in this file that does **not** cut the tag down to its
+    primary subtag, and that was measured rather than reasoned. A numbering
+    system is a property of the *locale*, not of the language: CLDR gives bare
+    `ar` Latin digits and `ar-EG` Arabic-Indic ones, `ur` Latin and `ur-IN`
+    Persian. Truncating would hand `ar-EG` the answer for `ar` — the mirror of
+    the bug `stringsFor` avoids by truncating, where `fao` must not find the
+    Farsi table. Two questions, two ways of reading the same tag.
+
+    Formatters are cached because the bar asks on every keystroke, and the
+    fallback is `String` rather than a throw: a malformed tag from a site's
+    `lang` attribute must cost Latin digits, never the whole editor. */
+const digitCache = new Map<string, (n: number) => string>();
+
+export function digitsFor(lang: string | null | undefined): (n: number) => string {
+  /* An underscore is not a BCP-47 separator and `Intl` throws on it, while
+     `<html lang="fa_IR">` is a real thing to find on a real site. */
+  const tag = (lang ?? "").trim().toLowerCase().replace(/_/g, "-") || "en";
+  const cached = digitCache.get(tag);
+  if (cached) return cached;
+  let format: (n: number) => string;
+  try {
+    const formatter = new Intl.NumberFormat(tag);
+    format = (n) => formatter.format(n);
+  } catch {
+    format = String;
+  }
+  digitCache.set(tag, format);
+  return format;
 }
 
 /** `?lang=` on the panel's URL. */
