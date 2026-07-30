@@ -31,6 +31,13 @@ export interface EditorStrings {
   startFailed: string;
 
   signInTitle: string;
+  /** The one sentence before sign-in. §1.3 measured first arrival as two
+      sentences and Google's button, with every word of reassurance behind the
+      sign-in it was meant to make safe — so this says what the page is and that
+      nothing done on it is permanent, to whoever opens it. The URL is public and
+      this sentence is not a secret; the alternative is telling people only after
+      they have committed. */
+  signInWhat: string;
   signInNote: string;
   signInUnavailable: string;
   signInFailed: string;
@@ -187,6 +194,29 @@ export interface EditorStrings {
   inlineDraftStale: string;
   inlineLeaveWarning: string;
 
+  /* --- the first run, on the owner's own page (§2.5) --------------------- */
+
+  /** Step 1, advanced by an annotated element taking focus. */
+  tourStep1: string;
+  /** Step 2, advanced by the field going dirty. It is about Save, which §2.2
+      does not render until there is something to save — so this sentence and
+      the button appearing are the same event. */
+  tourStep2: string;
+  /** Step 3, and the last. It names Home rather than pointing at it: §2.5 wrote
+      "This is Home", and building it measured that step 3 always arrives while
+      the bar is dirty, where Home is inside the `▾` sheet rather than on the
+      row (`inline-bar.ts`, `layout`). The ring shows where; the words say what,
+      and stay true whichever shape the bar is in. */
+  tourStep3: string;
+  /** Every step is skippable — nothing here is modal and nothing waits. */
+  tourSkip: string;
+  /** The last step's own ending, beside tapping the thing it is about. */
+  tourDone: string;
+  /** In the bar's help: the "?" is how the tour is reopened, which is 7.7's
+      contract for its welcome notice and the same one here. Reopening does not
+      clear the flag. */
+  inlineHelpTourAgain: string;
+
   /* --- the owner's home (7.7) -------------------------------------------- */
 
   /** The first-run panel. Three sentences and a button, not a tour: what this
@@ -198,6 +228,11 @@ export interface EditorStrings {
   homeWelcomeUndo: string;
   homeWelcomeAsk: string;
   homeWelcomeClose: string;
+  /** The notice's one primary action: onto the owner's own page, in edit mode,
+      with the tour armed. Absent where the site has declared no `entryUrl` for
+      the entry on screen — the same rule `openPage` follows, and for the same
+      reason: an offer that cannot be kept is worse than no offer. */
+  homeWelcomeShowMe: string;
   /** The "?" that brings it back. */
   homeHelp: string;
   homeHelpTitle: string;
@@ -260,6 +295,8 @@ export const defaultStrings: EditorStrings = {
   startFailed: "The editor couldn't start.",
 
   signInTitle: "Sign in to edit",
+  signInWhat:
+    "This is where you change the words and pictures on your own site. Nothing you do here is permanent — every change is kept, and anything can be put back.",
   signInNote: "Use the Google account this site was set up with. Nothing else can get in.",
   signInUnavailable:
     "Sign-in isn't set up for this site yet — the Google client hasn't been created. " +
@@ -361,6 +398,17 @@ export const defaultStrings: EditorStrings = {
     "You had unsaved changes here, but the page has been edited somewhere else since. They've been dropped rather than written over that.",
   inlineLeaveWarning: "You have changes that haven't been saved yet.",
 
+  /* Three sentences, and the first two are instructions an owner carries out
+     rather than remembers. Nothing here says "field", "annotation" or "commit",
+     and step 2 makes the one promise that matters before somebody types into
+     their own home page for the first time. */
+  tourStep1: "This text is yours — tap the highlighted words to change them.",
+  tourStep2: "Type over it. Save makes it real — nothing is public until you press Save.",
+  tourStep3: "Home has your visitors, what you've changed, and where to ask for something bigger.",
+  tourSkip: "Skip",
+  tourDone: "Got it",
+  inlineHelpTourAgain: "Show me how again",
+
   /* --- the owner's home -------------------------------------------------- */
 
   /* Voice, and it is the whole of Decision 2: say what this is, say that
@@ -376,6 +424,7 @@ export const defaultStrings: EditorStrings = {
   homeWelcomeAsk:
     "For anything bigger than words and pictures — a new section, a different layout — use “Ask for a change” below and describe what you want.",
   homeWelcomeClose: "Got it",
+  homeWelcomeShowMe: "Show me how",
   homeHelp: "?",
   homeHelpTitle: "What is this?",
 
@@ -442,6 +491,8 @@ const fr: EditorStrings = {
   startFailed: "L’éditeur n’a pas pu démarrer.",
 
   signInTitle: "Connectez-vous pour modifier",
+  signInWhat:
+    "C’est ici que vous changez les mots et les images de votre propre site. Rien de ce que vous faites ici n’est définitif — chaque changement est conservé, et tout peut être remis comme avant.",
   signInNote:
     "Utilisez le compte Google avec lequel ce site a été créé. Rien d’autre ne peut entrer.",
   signInUnavailable:
@@ -539,6 +590,18 @@ const fr: EditorStrings = {
     "Vous aviez des modifications non enregistrées ici, mais la page a été modifiée ailleurs depuis. Elles ont été abandonnées plutôt qu’écrites par-dessus.",
   inlineLeaveWarning: "Vous avez des modifications qui ne sont pas encore enregistrées.",
 
+  /* Step 2 keeps the English sentence's two jobs in one line: écrivez par-dessus,
+     and nothing is public until Enregistrer. The imperative is `vous`, like the
+     rest of this table. */
+  tourStep1: "Ce texte est le vôtre — touchez les mots surlignés pour les changer.",
+  tourStep2:
+    "Écrivez par-dessus. Enregistrer le rend réel — rien n’est public tant que vous n’appuyez pas sur Enregistrer.",
+  tourStep3:
+    "Accueil, c’est vos visiteurs, ce que vous avez changé, et l’endroit pour demander plus grand.",
+  tourSkip: "Passer",
+  tourDone: "C’est compris",
+  inlineHelpTourAgain: "Remontrez-moi",
+
   homeWelcomeTitle: "C’est ici que vous changez votre site",
   homeWelcomeBody:
     "Tout ce que vous écrivez ici va sur votre vrai site, en général en une ou deux minutes. Vous pouvez aussi toucher les mots sur vos propres pages et écrire par-dessus.",
@@ -547,6 +610,7 @@ const fr: EditorStrings = {
   homeWelcomeAsk:
     "Pour tout ce qui dépasse les mots et les images — une nouvelle section, une autre mise en page — utilisez « Demander un changement » ci-dessous et décrivez ce que vous voulez.",
   homeWelcomeClose: "C’est compris",
+  homeWelcomeShowMe: "Montrez-moi",
   homeHelp: "?",
   homeHelpTitle: "Qu’est-ce que c’est ?",
 
@@ -612,6 +676,8 @@ const fa: EditorStrings = {
   startFailed: "ویرایشگر بالا نیامد.",
 
   signInTitle: "برای ویرایش وارد شو",
+  signInWhat:
+    "اینجا جایی است که کلمه‌ها و عکس‌های سایت خودت را عوض می‌کنی. هیچ‌کدام از کارهایت اینجا همیشگی نیست — هر تغییری نگه داشته می‌شود و هر چیزی را می‌شود به حالت اولش برگرداند.",
   signInNote: "با همان حساب گوگلی وارد شو که سایت با آن ساخته شده. هیچ‌کس دیگری راه ندارد.",
   signInUnavailable:
     "ورود برای این سایت هنوز راه نیفتاده — کلاینت گوگلش ساخته نشده. " +
@@ -706,6 +772,16 @@ const fa: EditorStrings = {
     "اینجا تغییرهای ذخیره‌نشده داشتی، ولی از آن موقع صفحه جای دیگری عوض شده. به‌جای اینکه روی آن نوشته شوند، کنار گذاشته شدند.",
   inlineLeaveWarning: "تغییرهایی داری که هنوز ذخیره نشده.",
 
+  /* Nimagiti's own register: informal, direct, second person singular — the same
+     voice `inlineHelpEdit` uses two lines up. «ذخیره» is the button's own word,
+     so step 2 names it the way the bar does. */
+  tourStep1: "این متن مال خودت است — روی کلمه‌های هایلایت‌شده بزن تا عوضشان کنی.",
+  tourStep2: "رویش بنویس. ذخیره واقعی‌اش می‌کند — تا ذخیره را نزنی هیچ‌چیز عمومی نمی‌شود.",
+  tourStep3: "خانه بازدیدکننده‌هایت، آنچه عوض کرده‌ای، و جای درخواست چیزهای بزرگ‌تر است.",
+  tourSkip: "رد کن",
+  tourDone: "فهمیدم",
+  inlineHelpTourAgain: "دوباره نشانم بده",
+
   homeWelcomeTitle: "اینجا جایی است که سایتت را عوض می‌کنی",
   homeWelcomeBody:
     "هرچه اینجا بنویسی روی سایت واقعی‌ات می‌رود، معمولاً تا یکی دو دقیقه. می‌توانی روی کلمه‌های صفحه‌های خودت هم بزنی و رویشان بنویسی.",
@@ -714,6 +790,7 @@ const fa: EditorStrings = {
   homeWelcomeAsk:
     "برای هرچیزی بزرگ‌تر از کلمه و عکس — یک بخش تازه، یک چیدمان دیگر — از «درخواست تغییر» پایین استفاده کن و بنویس چه می‌خواهی.",
   homeWelcomeClose: "فهمیدم",
+  homeWelcomeShowMe: "نشانم بده",
   homeHelp: "?",
   homeHelpTitle: "این چیست؟",
 

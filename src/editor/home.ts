@@ -93,7 +93,16 @@ export interface HomeOptions {
 /** The whole block, ready to insert. Built synchronously from data that may
     still be loading — `setData` fills in the rest when it arrives, so the
     editor never waits on analytics to draw its form. */
-export function home(options: HomeOptions): { element: HTMLElement; setData: (data: HomeData) => void } {
+export function home(options: HomeOptions): {
+  element: HTMLElement;
+  setData: (data: HomeData) => void;
+  /** Where "Show me how" goes: the entry on screen, in edit mode, with §2.5's
+      tour armed. Null takes the button away — a site that has declared no
+      `entryUrl` has nowhere to send anybody, which is the rule `openPage` has
+      always followed. Called again whenever the picker changes, because the
+      answer is about the entry rather than about the owner. */
+  setShowMe: (href: string | null) => void;
+} {
   const { strings } = options;
   const store = safeStorage(options.storage);
   const element = el("div", "sk-editor__home");
@@ -103,7 +112,7 @@ export function home(options: HomeOptions): { element: HTMLElement; setData: (da
   help.type = "button";
   help.title = strings.homeHelpTitle;
   help.addEventListener("click", () => {
-    welcome.hidden = false;
+    welcome.element.hidden = false;
     /* Re-opening it deliberately does *not* clear the flag: someone reading it
        a second time has not become a first-time user again. */
   });
@@ -116,11 +125,12 @@ export function home(options: HomeOptions): { element: HTMLElement; setData: (da
      with the data. Unknown stays false. */
   let linkable = false;
 
-  element.append(welcome, help, blocks, actions);
+  element.append(welcome.element, help, blocks, actions);
   actions.append(requestButton(strings, options.onRequest, () => linkable));
 
   return {
     element,
+    setShowMe: welcome.setShowMe,
     setData: (data) => {
       linkable = data.linkable === true;
       blocks.textContent = "";
@@ -144,7 +154,10 @@ export function home(options: HomeOptions): { element: HTMLElement; setData: (da
 
 /* --- what this is ------------------------------------------------------- */
 
-function firstRun(strings: EditorStrings, store: Storage | null): HTMLElement {
+function firstRun(
+  strings: EditorStrings,
+  store: Storage | null
+): { element: HTMLElement; setShowMe: (href: string | null) => void } {
   const panel = el("div", "sk-editor__welcome");
   panel.hidden = store?.getItem(SEEN_KEY) === "1";
 
@@ -153,19 +166,49 @@ function firstRun(strings: EditorStrings, store: Storage | null): HTMLElement {
     panel.append(el("p", "sk-editor__welcometext", line));
   }
 
-  const done = el("button", "sk-editor__welcomeclose", strings.homeWelcomeClose);
-  done.type = "button";
-  done.addEventListener("click", () => {
-    panel.hidden = true;
+  const seen = (): void => {
     try {
       store?.setItem(SEEN_KEY, "1");
     } catch {
       /* A browser refusing to remember costs a reminder next time, which is a
          great deal better than an editor that will not open. */
     }
+  };
+
+  /* §2.5's one primary action, and the notice's only route out of prose. An
+     owner arriving at /edit lands here, and what they came to learn happens on
+     their own page rather than on this form — so the notice offers to take them
+     there with the tour armed.
+
+     An anchor rather than a button because it goes somewhere, and same-tab
+     rather than `link()`'s `_blank` because this *is* the journey: the bar's Home
+     is the way back, which is what §2.3 built it for. Nothing can be lost by
+     following it — an owner reading the first-run notice has not typed anything
+     into a form they have not scrolled to yet. */
+  const showMe = el("a", "sk-editor__welcomeshow", strings.homeWelcomeShowMe);
+  showMe.hidden = true;
+  /* Marked read on the way out. Being shown how is a stronger acknowledgement
+     than tapping "Got it", so coming back to a notice that had to be dismissed
+     all over again would be the panel forgetting what the owner just did. */
+  showMe.addEventListener("click", seen);
+
+  const done = el("button", "sk-editor__welcomeclose", strings.homeWelcomeClose);
+  done.type = "button";
+  done.addEventListener("click", () => {
+    panel.hidden = true;
+    seen();
   });
-  panel.append(done);
-  return panel;
+  const row = el("p", "sk-editor__welcomeactions");
+  row.append(showMe, done);
+  panel.append(row);
+
+  return {
+    element: panel,
+    setShowMe: (href) => {
+      if (href) showMe.href = href;
+      showMe.hidden = !href;
+    }
+  };
 }
 
 /* --- did anyone come ---------------------------------------------------- */

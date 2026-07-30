@@ -164,6 +164,14 @@
   font-size: 0.875rem;
 }
 
+/* Nothing to say means no row. The one state that reaches this is §2.5's first
+   step, where the tour is saying the resting hint in better words one row down
+   (`inline.ts`, `refresh`) — and a blank row above the controls would look like a
+   bar that had lost its sentence rather than one that had yielded it. */
+.bar__status:empty {
+  display: none;
+}
+
 /* The one word in the status line that is the *name of the thing being
    edited* — worth being the brightest text in the bar, because it is the
    answer to "what am I changing?". */
@@ -350,6 +358,30 @@ button:disabled {
   border-block-start: 1px solid var(--sk-editor-line-soft, rgba(231, 232, 236, 0.07));
   font-size: 0.875rem;
   color: var(--sk-editor-dim, rgba(231, 232, 236, 0.68));
+}
+
+/* §2.5's tour step. The same box as the note — §2.2 measured a step at 173px
+   against a 93px resting bar, and that number came from a prototype that put the
+   step in the note, so the split must not change the geometry — with the brighter
+   ink of the two, because this is an instruction rather than a report. It is a
+   separate element because the note is where an error, a conflict and a restored
+   draft land, and a first run a dropped connection can silently overwrite is not
+   a first run. */
+.bar__tour {
+  margin: 0.5rem 0 0;
+  padding-block-start: 0.5rem;
+  border-block-start: 1px solid var(--sk-editor-line-soft, rgba(231, 232, 236, 0.07));
+  font-size: 0.875rem;
+  color: var(--sk-editor-ink, #e7e8ec);
+}
+
+/* The ring on the control the last step is about. `box-shadow` rather than
+   `outline`, so it cannot be mistaken for — or overwritten by — the focus ring
+   two rules above it, and so it takes no layout space and cannot reflow the bar
+   it is drawn inside. */
+[data-sk-tour="on"] {
+  border-color: var(--sk-editor-accent, #6f93c9);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sk-editor-accent-lit, #8fb0e0) 45%, transparent);
 }
 
 .bar__note[data-tone="bad"] {

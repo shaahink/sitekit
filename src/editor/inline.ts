@@ -27,8 +27,9 @@ import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
 import { clearDraft, draftKey, readDraft, saveDraft, type Draft } from "./drafts.js";
 import { Bar, type SaveState } from "./inline-bar.js";
-import { EDIT_PARAM, panelHref, signInHref } from "./return-to.js";
+import { EDIT_PARAM, panelHref, signInHref, TOUR_PARAM, tourArmed } from "./return-to.js";
 import { digitsFor, dirFor, editorStrings, fill, type EditorStrings } from "./strings.js";
+import { Tour, tourStorage, type TourStep } from "./tour.js";
 import { coerce, findField, plural, valueAt } from "./values.js";
 
 export interface InlineOptions {
@@ -147,8 +148,24 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
   function herePath(): string {
     const url = new URL(location.href);
     url.searchParams.delete(EDIT_PARAM);
+    /* And the arming, for the same reason twice over: a Home link carrying
+       `tour=1` would arm the tour again on the way back, and the panel would put
+       an already-armed page behind its own "Show me how". */
+    url.searchParams.delete(TOUR_PARAM);
     const query = url.searchParams.toString();
     return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
+  }
+
+  /* Read before anything else touches the URL, and spent immediately. Left on
+     the address bar it would survive a reload, and "dismissed stays dismissed
+     across reloads" would then be true of the flag and false of what an owner
+     actually meets — the one thing §2.5 inherits from 7.7 that a test can check
+     and a person would notice. */
+  const armed = tourArmed(location.search);
+  if (armed) {
+    const url = new URL(location.href);
+    url.searchParams.delete(TOUR_PARAM);
+    history.replaceState(null, "", url);
   }
 
   const bar = new Bar(cssHref, {
@@ -168,7 +185,8 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     save: () => void commit(),
     revert: () => revertFocused(),
     discard: () => discardAll(),
-    exit: () => exit()
+    exit: () => exit(),
+    home: () => tour.wentHome()
   }, {
     /* §1.6: zero routes out of this bar on all three sites, while the help
        text promised one twice. This is the route, and it carries the page
@@ -177,6 +195,33 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     href: panelHref(editorPath, { back: herePath(), lang }),
     label: strings.inlineHome
   });
+
+  /* §2.5's first run. Built here so the bar's `home` callback above has
+     something to call, and *started* far below — only once every annotation has
+     been judged, because a tour that says "tap the highlighted words" on a page
+     with none is worse than no tour. Its steps live in `tour.ts`, which knows
+     nothing about a bar; this is the view. */
+  const tour = new Tour(
+    {
+      /* `refresh()` after each transition, because the status line's own
+         sentence depends on which step is showing — see the `tour.showing === 1`
+         branch there. Without it the bar would keep whichever sentence it was
+         holding when the step arrived. */
+      show: (step, last) => {
+        bar.setTour(stepText(step), {
+          label: last ? strings.tourDone : strings.tourSkip,
+          run: () => tour.end()
+        });
+        refresh();
+      },
+      hide: () => {
+        bar.setTour(null);
+        refresh();
+      },
+      spotlight: (on) => bar.spotlight(on)
+    },
+    tourStorage()
+  );
 
   if (!annotated.length) {
     idle(strings.inlineNothing);
@@ -358,6 +403,19 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
   refresh();
   window.addEventListener("beforeunload", onBeforeUnload, on);
 
+  /* --- the first run ----------------------------------------------------- */
+
+  /* Last, because everything above decides whether there is anything to teach.
+     `editables` is empty on a page whose every annotation turned out to be
+     panel-only or broken — bez's marquee and watermark are both in that
+     position — and on such a page step 1 would be an instruction an owner cannot
+     carry out. `annotated.length` is not the same question and returned early
+     above; this is the narrower one. */
+  if (editables.size) {
+    bar.offerTour(strings.inlineHelpTourAgain, () => tour.start(true));
+    tour.start(armed);
+  }
+
   /* --- the state machine ------------------------------------------------ */
 
   function judge(element: HTMLElement, path: string, fields: Field[], values: unknown): Verdict {
@@ -462,6 +520,9 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     bar.setStatus(fill(strings.inlineFocused, { what: target.field.label }), target.field.label);
     bar.setRevertVisible(dirty.has(path));
     clear(path);
+    /* §2.5 step 1's own ending: the owner tapped the highlighted words, which is
+       the whole of what step 1 asked for. */
+    tour.focused();
     keepClearOfBar(target.element);
   }
 
@@ -484,6 +545,11 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       bar.clearNote();
       noteIsStaleOnEdit = false;
     }
+    /* Step 2 is about Save, and Save is not on the bar until there is something
+       to save (§2.2) — so the sentence and the button arrive together. `changed`
+       rather than `dirty.size`: typing a value back to what the file already says
+       has not made anything savable. */
+    if (changed) tour.typed();
     refresh();
     persist();
   }
@@ -667,6 +733,20 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     } else if (count) {
       const phrase = plural(count, strings.change, strings.changes, digits);
       bar.setStatus(fill(strings.inlinePending, { count: phrase }), phrase);
+    } else if (tour.showing === 1) {
+      /* Found by looking at the first run in a browser rather than by any
+         assertion about it: with both lines showing, the bar said the same
+         instruction twice — *"Tap any highlighted text to change it."* dim on one
+         row and *"This text is yours — tap the highlighted words to change
+         them."* bright on the next, on the one screen a first-time owner reads
+         most carefully. Both strings are right in isolation, which is why writing
+         them in two different sections of the design hid it.
+
+         Only step 1 duplicates. Step 2's status is "Changing {label}" — the
+         worked example §2.5 keeps deliberately — and step 3's is the unsaved
+         count. So the weaker sentence stands down for exactly one step, and
+         `.bar__status:empty` collapses the row rather than leaving it blank. */
+      bar.setStatus("");
     } else {
       bar.setStatus(strings.inlineIdle);
     }
@@ -695,6 +775,12 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       the panel gets about that. */
   function signInBack(): string {
     return signInHref(editorPath, herePath(), lang);
+  }
+
+  /** Which sentence a step says. In one place rather than three, so a step
+      number and the words for it cannot drift apart. */
+  function stepText(step: TourStep): string {
+    return step === 1 ? strings.tourStep1 : step === 2 ? strings.tourStep2 : strings.tourStep3;
   }
 
   function idle(text: string): void {
@@ -729,6 +815,10 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
   function exit(): void {
     if (dirty.size && !confirm(strings.inlineLeaveWarning)) return;
+    /* `stop`, not `end`: the flag stays unset. An owner who left edit mode half
+       way through the first run has not told us they understood it, and 7.7's
+       notice behaves the same way — only "Got it" is a dismissal. */
+    tour.stop();
     listeners.abort();
     for (const { element, addedDir } of editables.values()) {
       element.removeAttribute("contenteditable");

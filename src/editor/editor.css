@@ -631,8 +631,19 @@ body {
   line-height: 1.55;
 }
 
-.sk-editor__welcomeclose {
-  margin-block-start: 0.4rem;
+/* The notice's two ways out, on one row: be shown how, or say you have read it.
+   Wrapping rather than shrinking, because "Show me how" is three words in
+   English and rather more in French, and 390px is the width that matters. */
+.sk-editor__welcomeactions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0;
+}
+
+.sk-editor__welcomeclose,
+.sk-editor__welcomeshow {
   padding: 0.55rem 1.1rem;
   border: 1px solid var(--sk-editor-line);
   border-radius: var(--sk-editor-radius);
@@ -641,6 +652,23 @@ body {
   font: inherit;
   cursor: pointer;
 }
+
+/* §2.5's one primary action. The panel's only filled button outside the save
+   bar, and it earns that: it is what the first screen is *for*, and the whole
+   reason 7.7's notice stopped being three paragraphs and a dismissal. An anchor,
+   so the 44px floor has to be laid out rather than grown into. */
+.sk-editor__welcomeshow {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
+  border-color: transparent;
+  background: var(--sk-editor-accent);
+  color: #0d1016;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sk-editor__welcomeshow[hidden] { display: none; }
 
 /* The way back to it. A circle in the corner rather than a line of text: it is
    for the second visit, and it should be findable without being a feature. */

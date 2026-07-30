@@ -25,6 +25,10 @@ export interface BarButtons {
   revert(): void;
   discard(): void;
   exit(): void;
+  /** Home was tapped. The navigation is the link's own; this exists so §2.5's
+      last step can end *before* the page changes, which is the only moment it
+      can still write its flag. */
+  home?(): void;
 }
 
 /** The one thing on this bar that goes somewhere, so it is an anchor and not a
@@ -80,6 +84,11 @@ export class Bar {
   private readonly pageSheet: HTMLLinkElement;
   private readonly bar: HTMLElement;
   private readonly status: HTMLParagraphElement;
+  /** §2.5's step, in its own line rather than in `note`. The prototype used the
+      note and the note is where an error, a conflict or a restored draft lands —
+      a first run that a dropped connection can silently overwrite is not a first
+      run. Same styling, so §2.2's measured 173px is unchanged by the split. */
+  private readonly tourLine: HTMLParagraphElement;
   private readonly note: HTMLParagraphElement;
   private readonly help: HTMLElement;
   private readonly helpLines: { wrap: HTMLElement; list: HTMLElement };
@@ -104,6 +113,10 @@ export class Bar {
       else, so there is one place to read the answer from. */
   private pending = 0;
   private revertShown = false;
+  /** Whether §2.5's last step is ringing the way to Home. Held rather than
+      written straight onto a node, because which node that is changes under
+      `layout()` and under the sheet opening. */
+  private spotlit = false;
   /** Which control set is currently in the DOM, so a keystroke that changes
       nothing about the shape does not re-append the row — moving a focused
       button would blur it. */
@@ -182,7 +195,12 @@ export class Bar {
     /* Leaving by a link the sheet is holding. If the navigation is refused —
        `beforeunload` over unsaved work — the sheet must not be left open on
        top of the page it was covering. */
-    this.homeLink?.addEventListener("click", () => this.closeSheet());
+    this.homeLink?.addEventListener("click", () => {
+      this.closeSheet();
+      /* Before the navigation rather than after it, because after it there is
+         no page left to run in. §2.5's last step ends here. */
+      buttons.home?.();
+    });
 
     /* Nothing is removed from the bar by §2.2 — the rare controls move here.
        Full-width rows rather than a row of small ones: this opens on a phone,
@@ -205,6 +223,14 @@ export class Bar {
     this.note.className = "bar__note";
     this.note.hidden = true;
 
+    this.tourLine = document.createElement("p");
+    this.tourLine.className = "bar__tour";
+    this.tourLine.hidden = true;
+    /* Announced when it changes — the steps advance on what the owner is doing
+       rather than on a button, so somebody listening rather than looking would
+       otherwise never learn that anything had. */
+    this.tourLine.setAttribute("aria-live", "polite");
+
     this.help = document.createElement("div");
     this.help.className = "bar__help";
     this.help.hidden = true;
@@ -216,7 +242,7 @@ export class Bar {
     main.append(this.status, this.actions);
     /* The sheet rises out of the bar rather than dropping out of it: there is
        nothing below the bar but the edge of the screen. */
-    this.bar.append(this.sheet, main, this.note, this.help);
+    this.bar.append(this.sheet, main, this.tourLine, this.note, this.help);
     this.root.append(sheet, this.bar);
     document.body.append(this.host);
 
@@ -278,6 +304,24 @@ export class Bar {
     this.helpLines.list.append(item);
   }
 
+  /** The way back into §2.5's first run, in the help — because the "?" is how
+      7.7's welcome notice is reopened and this is the same contract.
+
+      Added after construction, and for `addHelp`'s reason rather than for
+      convenience: a page with nothing editable on it — signed out, or simply not
+      annotated — has nothing to be shown how to do, and a control that offers to
+      teach an owner to tap text they cannot tap is worse than no control. The bar
+      does not know which kind of page it is on until `inline.ts` has judged every
+      annotation. */
+  offerTour(label: string, run: () => void): void {
+    this.help.append(
+      button("btn--quiet", label, () => {
+        this.closeHelp();
+        run();
+      })
+    );
+  }
+
   setRevertVisible(visible: boolean): void {
     this.revertShown = visible;
     this.layout();
@@ -330,6 +374,8 @@ export class Bar {
        elsewhere, leave — and the way out stays last, where it was. */
     if (editing && this.homeLink) rows.splice(2, 0, this.homeLink);
     this.sheet.replaceChildren(...rows);
+    /* Home has just moved, so the ring has to move with it. */
+    this.applySpotlight();
   }
 
   private toggleSheet(): void {
@@ -340,11 +386,13 @@ export class Bar {
   private openSheet(): void {
     this.sheet.hidden = false;
     this.moreButton.setAttribute("aria-expanded", "true");
+    this.applySpotlight();
   }
 
   private closeSheet(): void {
     this.sheet.hidden = true;
     this.moreButton.setAttribute("aria-expanded", "false");
+    this.applySpotlight();
   }
 
   /** A row in the sheet. Every one of them closes it: they are all either
@@ -382,6 +430,48 @@ export class Bar {
   clearNote(): void {
     this.note.textContent = "";
     this.note.hidden = true;
+  }
+
+  /* --- the first run (§2.5) --------------------------------------------- */
+
+  /** One step of the tour, or `null` to take it down. `action` is the step's own
+      way out — *Skip* on the first two, *Got it* on the last — because §2.5's
+      rule is that every step is skippable and nothing here is modal. */
+  setTour(text: string | null, action?: NoteAction): void {
+    this.tourLine.textContent = "";
+    if (text === null) {
+      this.tourLine.hidden = true;
+      return;
+    }
+    this.tourLine.append(text);
+    if (action) this.tourLine.append(" ", button("btn--quiet", action.label, action.run));
+    this.tourLine.hidden = false;
+  }
+
+  /** Ring the way to Home for the tour's last step, or stop.
+
+      Which node that is depends on the bar's shape, and only the bar knows:
+      §2.5 wrote step 3 as pointing at the Home control, and step 3 always
+      arrives while there is something to save — which is exactly the state where
+      `layout()` has moved Home into the `▾` sheet. A ring on a node inside a
+      closed sheet is a ring on nothing, so it rings the route: `▾` while the
+      sheet is shut, the Home row itself once it is open. */
+  spotlight(on: boolean): void {
+    this.spotlit = on;
+    this.applySpotlight();
+  }
+
+  private applySpotlight(): void {
+    this.homeLink?.removeAttribute("data-sk-tour");
+    this.moreButton.removeAttribute("data-sk-tour");
+    if (!this.spotlit || !this.homeLink) return;
+    const hidden = this.homeLink.parentElement === this.sheet && this.sheet.hidden;
+    (hidden ? this.moreButton : this.homeLink).setAttribute("data-sk-tour", "on");
+  }
+
+  private closeHelp(): void {
+    this.help.hidden = true;
+    this.helpButton.setAttribute("aria-expanded", "false");
   }
 
   private toggleHelp(): void {

@@ -33,6 +33,11 @@ import { LANG_PARAM } from "./strings.js";
 export const RETURN_PARAM = "from";
 export const BACK_PARAM = "back";
 export const EDIT_PARAM = "edit";
+/** The fourth link, added in 0.17.0 for §2.5: *"show me how"* from the panel's
+    welcome notice onto the owner's own page, with the tour armed. It is a
+    separate parameter from `edit` because the two are separate facts — every
+    later visit to the page is `edit=1` and is not a first run. */
+export const TOUR_PARAM = "tour";
 
 /* Control characters are dropped or normalised at different points by
    different browsers, which is how a `/\tjavascript:…` gets past a check that
@@ -114,13 +119,35 @@ export function fieldFromHash(hash: string | null | undefined): string | null {
 
 /** The same page, in edit mode. Built by hand rather than through `URL` so it
     stays relative — the panel and the bar both hand this straight to an
-    anchor or to `location`. */
-export function editHref(path: string): string {
+    anchor or to `location`.
+
+    `tour` arms §2.5's first run on arrival. One builder rather than a second
+    one, so the spelling of both parameters lives in exactly one place; the bar
+    strips them both off `herePath()` on the way back, and a URL carrying two
+    `edit=1`s is not one an owner could have arrived at by hand. */
+export function editHref(path: string, options: { tour?: boolean } = {}): string {
   const safe = safeReturnPath(path);
   if (!safe) return "/";
   const [before, hash] = splitHash(safe);
   const joiner = before.includes("?") ? "&" : "?";
-  return `${before}${joiner}${EDIT_PARAM}=1${hash ? `#${hash}` : ""}`;
+  const tour = options.tour ? `&${TOUR_PARAM}=1` : "";
+  return `${before}${joiner}${EDIT_PARAM}=1${tour}${hash ? `#${hash}` : ""}`;
+}
+
+/** Whether this page was arrived at with the tour armed.
+
+    Read off `location.search` by the caller rather than from `location` here, so
+    the rule is testable without a browser — and it is a rule rather than a
+    lookup: anything other than `1` is not an arming, because a `tour=0` that
+    armed a tour would be the worst kind of surprise.
+
+    The parameter is spent on arrival — `inline.ts` takes it off the URL with
+    `replaceState` the moment it has read it. Left there, a reload would re-arm
+    the tour forever and "dismissed stays dismissed across reloads" would be
+    true of the flag and false of the thing an owner actually experiences. */
+export function tourArmed(search: string | null | undefined): boolean {
+  if (!search) return false;
+  return new URLSearchParams(search).get(TOUR_PARAM) === "1";
 }
 
 function splitHash(path: string): [string, string] {

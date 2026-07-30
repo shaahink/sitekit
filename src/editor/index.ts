@@ -208,6 +208,14 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
   async function signIn(): Promise<void> {
     const card = el("div", "sk-editor__signin");
     card.append(el("h2", "sk-editor__title", strings.signInTitle));
+    /* §2.5's one sentence before sign-in. Appended here rather than inside
+       `mountGoogleButton`, so it is said whether or not a Google client exists:
+       a site whose sign-in is not configured yet still owes the person reading
+       an explanation of what they are looking at, and that branch is the one an
+       owner meets on the day their site goes up.
+       §1.3 measured the old first screen as two sentences and a button, with
+       every word of reassurance behind the sign-in it was meant to make safe. */
+    card.append(el("p", "sk-editor__welcometext", strings.signInWhat));
     element.append(card);
     await mountGoogleButton(card, () => void start());
   }
@@ -377,12 +385,14 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
          `strings.backToPage` was written for this and referenced by nothing
          until now — and *Edit this page on the site* otherwise. Two links to
          two nearly-identical places is how a footer stops being read. */
-      if (backTo) {
-        route.append(link(editHref(backTo), strings.backToPage));
-        return;
-      }
-      const url = urls.get(select.value);
-      if (url) route.append(link(editHref(url), strings.openPage));
+      const url = backTo ?? urls.get(select.value);
+      /* Where "Show me how" goes, decided here because it is the same page the
+         footer's route already resolved — one lookup, and the two links cannot
+         disagree about which entry is on screen. Absent where the site declared
+         no `entryUrl`, which is exactly when `url` is undefined. */
+      owner.setShowMe(url ? editHref(url, { tour: true }) : null);
+      if (!url) return;
+      route.append(link(editHref(url), backTo ? strings.backToPage : strings.openPage));
     };
 
     /* Above the picker, because it is what an owner arrives with: what is
