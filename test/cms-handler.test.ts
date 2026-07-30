@@ -367,6 +367,88 @@ describe("POST", () => {
     expect(response.status).toBe(400);
   });
 
+  /* Session 16, F2 — measured against a real repository, not reasoned about.
+     Zod strips unknown keys, so the whole-document re-validation above passed an
+     edit to a path the schema has never heard of, and the junk subtree landed in
+     the site's content under a 200 and the word "Saved". */
+  it("refuses an edit to a path the schema has no field for, rather than committing it", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await handler.POST(
+      post(
+        {
+          collection: "home",
+          edits: [{ path: "nothing.like.this", value: "junk" }],
+          sha: "sha-original"
+        },
+        { cookie: await cookie() }
+      )
+    );
+    const body = await response.json();
+    expect(response.status).toBe(400);
+    expect(body.issues[0].path).toBe("nothing.like.this");
+    expect(puts).toHaveLength(0);
+    /* And the operator can find out, which the silent version could not offer. */
+    expect(errors.mock.calls.flat().join(" ")).toContain("nothing.like.this");
+    errors.mockRestore();
+  });
+
+  it("refuses the whole save when one edit of several is unknown", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await handler.POST(
+      post(
+        {
+          collection: "home",
+          edits: [
+            { path: "hero.tagline", value: "fine" },
+            { path: "hero.smuggled", value: "not fine" }
+          ],
+          sha: "sha-original"
+        },
+        { cookie: await cookie() }
+      )
+    );
+    expect(response.status).toBe(400);
+    /* All or nothing: half-applying a save would leave an owner unable to tell
+       what landed. */
+    expect(puts).toHaveLength(0);
+    vi.restoreAllMocks();
+  });
+
+  it("still saves an array whole, which is how a row moves", async () => {
+    /* The guard's most likely way to be wrong. An array's own path is not a
+       scalar field, and a reorder is expressed as the whole array — refuse that
+       and adding, removing or moving a row stops working everywhere. */
+    const response = await handler.POST(
+      post(
+        {
+          collection: "home",
+          edits: [{ path: "hero.slides", value: [{ alt: "Red brushstrokes" }, { alt: "A black canvas" }] }],
+          sha: "sha-original"
+        },
+        { cookie: await cookie() }
+      )
+    );
+    expect(response.status).toBe(200);
+    expect(Buffer.from(puts[0]!.content, "base64").toString("utf8")).toMatch(
+      /slides:[\s\S]*Red brushstrokes[\s\S]*A black canvas/
+    );
+  });
+
+  it("still saves a row inside an array by its concrete index", async () => {
+    const response = await handler.POST(
+      post(
+        {
+          collection: "home",
+          edits: [{ path: "hero.slides[1].alt", value: "Vermilion" }],
+          sha: "sha-original"
+        },
+        { cookie: await cookie() }
+      )
+    );
+    expect(response.status).toBe(200);
+    expect(Buffer.from(puts[0]!.content, "base64").toString("utf8")).toContain("Vermilion");
+  });
+
   it("insists on knowing which version the edit was based on", async () => {
     const response = await handler.POST(
       post(

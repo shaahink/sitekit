@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { formModel, type Field } from "../src/cms/form.js";
+import { savablePaths } from "../src/editor/values.js";
 
 /* Bez's real shapes, not toys — the same constructs session 7 probed before
    committing to generating the editor from the schemas. If the fleet's content
@@ -323,5 +324,57 @@ describe("a field's own name", () => {
     const [field] = formModel(schema);
     expect(field?.label).toBe("Where to write to");
     expect(field?.help).toBe("Shown on the contact page");
+  });
+});
+
+/* What the content edge is allowed to write.
+   ---------------------------------------------------------------------------
+   Session 16's F2 guard reads this set, so what it must contain is not a matter
+   of taste: too small and an owner cannot turn a section off or commit a
+   photograph, too large and the bug the guard exists for is still reachable.
+
+   Both of the ways it can be too small are here, because both are savable paths
+   that are deliberately *not* fields — and a guard written on `findField` alone
+   would have refused both. */
+describe("savablePaths", () => {
+  it("includes a section's on/off switch, which form.ts lifts out of `fields`", () => {
+    const schema = z.object({
+      sections: z.array(
+        z.object({ visible: z.boolean().default(true), heading: z.string() })
+      )
+    });
+    const paths = savablePaths(formModel(schema));
+    expect(paths.has("sections[].visible")).toBe(true);
+    expect(paths.has("sections[].heading")).toBe(true);
+    /* The array itself, because a row moving cannot be one path's change. */
+    expect(paths.has("sections")).toBe(true);
+    /* And the switch is genuinely not in `fields`, which is the trap. */
+    const [array] = formModel(schema);
+    if (array?.kind !== "array" || array.item.kind !== "group") throw new Error("unreachable");
+    expect(array.item.fields.map((field) => field.path)).not.toContain("sections[].visible");
+  });
+
+  it("includes a picture's w, h and alt even when the form omits them", () => {
+    /* The picker writes those three; an owner never types them, which is
+       exactly why they are omitted from the form and why a guard built from the
+       visible fields alone would stop a photograph from being committed. */
+    const schema = z.object({
+      slides: z.array(
+        z.object({ src: z.string(), w: z.number().int(), h: z.number().int(), alt: z.string() })
+      )
+    });
+    const paths = savablePaths(formModel(schema, { omit: ["slides[].w", "slides[].h"] }));
+    expect(paths.has("slides[].src")).toBe(true);
+    expect(paths.has("slides[].w")).toBe(true);
+    expect(paths.has("slides[].h")).toBe(true);
+    expect(paths.has("slides[].alt")).toBe(true);
+  });
+
+  it("does not include a path the schema has no field for", () => {
+    const schema = z.object({ hero: z.object({ tagline: z.string() }) });
+    const paths = savablePaths(formModel(schema));
+    expect(paths.has("hero.tagline")).toBe(true);
+    expect(paths.has("nothing.like.this")).toBe(false);
+    expect(paths.has("hero.smuggled")).toBe(false);
   });
 });

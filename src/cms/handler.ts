@@ -39,7 +39,7 @@ import { commitFiles } from "./tree.js";
 import { prepareUploads, resolveUploads, UploadError, type PreparedUpload } from "./uploads.js";
 import { formModel } from "./form.js";
 import { imageType, previewPaths } from "./preview.js";
-import { findField, valueAt } from "../editor/values.js";
+import { findField, savablePaths, templateOf, valueAt } from "../editor/values.js";
 import type { Field } from "./fields.js";
 import { ownerHome } from "./home.js";
 import { fileRequest, RequestError } from "./requests.js";
@@ -218,6 +218,44 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
     }
     if (!payload.sha) {
       return json({ ok: false, error: "Missing the version this edit was based on." }, 400);
+    }
+
+    /* Does the schema have a field at every path being written?
+       -------------------------------------------------------------------
+       Zod strips unknown keys, so the whole-document re-validation below
+       passes an edit to a path the schema has never heard of — and the junk
+       subtree lands in the site's content with a 200 and the word "Saved".
+       Measured in session 16, drill 6: `edits: [{ path: "nothing.like.this" }]`
+       committed a `nothing: like: this:` block into a real YAML file.
+
+       Checked here, before the credential and before GitHub, because a payload
+       this wrong is a fault in the caller and does not deserve a round trip.
+       The verdict comes from the same form model the panel renders, the inline
+       judge consults and `checkAnnotations` fails the build over, so all four
+       now agree about what is editable rather than three of them agreeing and
+       the writer accepting anything. */
+    const savable = savablePaths(
+      formModel(config.schema, { ...(config.omit ? { omit: config.omit } : {}) })
+    );
+    const unknown = edits.filter(
+      (edit) => typeof edit?.path !== "string" || !edit.path || !savable.has(templateOf(edit.path))
+    );
+    if (unknown.length) {
+      console.error(
+        "cms: refused edits to paths the schema has no field for:",
+        unknown.map((edit) => String(edit?.path)).join(", ")
+      );
+      return json(
+        {
+          ok: false,
+          error: "That change doesn't fit the content model.",
+          issues: unknown.map((edit) => ({
+            path: typeof edit?.path === "string" ? edit.path : "",
+            message: "This site's content model has no field there."
+          }))
+        },
+        400
+      );
     }
 
     let access: RepoAccess;

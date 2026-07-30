@@ -160,6 +160,47 @@ export function templateOf(path: string): string {
     it is looked up *for* is the human label — an owner should be told they are
     editing "Tagline", not `hero.tagline` — and the field kind, which decides
     whether the value can be typed into a paragraph at all. */
+/** Every template path this model can legitimately be asked to save.
+
+    `findField` is not enough on its own, and the difference is the whole reason
+    this exists: two kinds of savable path are deliberately *not* fields.
+
+    A group's on/off switch is lifted out of `fields` into `toggle` by
+    form.ts, so `sections[].visible` — the 0.9.0 feature — is unreachable by a
+    walk over `fields`. And a picture's `w`, `h` and `alt` are sibling *paths*
+    rather than fields, usually omitted from the form entirely, because the
+    picker writes them and an owner has no business typing them.
+
+    Guard a save on `findField` alone and both of those become refusals: an
+    owner could not turn a section off, and the picker could not commit a
+    photograph's dimensions. Measured against the fleet's own schemas, not
+    reasoned about — see cms.test.ts. */
+export function savablePaths(fields: Field[]): Set<string> {
+  const out = new Set<string>();
+  const walk = (field: Field): void => {
+    out.add(field.path);
+    if (field.kind === "group") {
+      if (field.toggle) out.add(field.toggle.path);
+      for (const child of field.fields) walk(child);
+      return;
+    }
+    /* The array's own path is savable — a row moving, added or removed cannot
+       be expressed as a change to one path, so the array goes whole. See
+       dirty.ts. */
+    if (field.kind === "array") {
+      walk(field.item);
+      return;
+    }
+    if (field.kind === "image") {
+      for (const path of [field.widthPath, field.heightPath, field.altPath]) {
+        if (path) out.add(path);
+      }
+    }
+  };
+  for (const field of fields) walk(field);
+  return out;
+}
+
 export function findField(fields: Field[], path: string): Field | undefined {
   const wanted = templateOf(path);
   for (const field of fields) {
