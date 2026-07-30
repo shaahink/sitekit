@@ -27,6 +27,19 @@ export interface BarButtons {
   exit(): void;
 }
 
+/** The one thing on this bar that goes somewhere, so it is an anchor and not a
+    button with a `location` in it. §1.6 counted the links in this shadow root
+    on three live sites and got zero on all three, while the help text named
+    the place it would not take them, twice.
+
+    Being a real link is the point rather than a detail: it can be opened in a
+    new tab, it is draggable, a screen reader calls it a link, and a long press
+    on a phone offers what a long press on a link offers. */
+export interface BarHome {
+  href: string;
+  label: string;
+}
+
 export interface NoteAction {
   label: string;
   run(): void;
@@ -76,11 +89,17 @@ export class Bar {
   private readonly helpButton: HTMLButtonElement;
   private readonly exitButton: HTMLButtonElement;
   private readonly moreButton: HTMLButtonElement;
+  /** One anchor, moved between the row and the sheet by `layout()` rather than
+      two anchors kept in step. Two would be two hrefs to keep right, and the
+      audit that counts routes out of this bar would count one affordance
+      twice. */
+  private readonly homeLink: HTMLAnchorElement | null;
   private readonly actions: HTMLElement;
   private readonly spacer: HTMLElement;
   /** The overflow sheet: what is not the job in hand while an owner is mid-edit
-      — undo everything, how this works, and the way out. */
+      — undo everything, how this works, Home, and the way out. */
   private readonly sheet: HTMLElement;
+  private readonly sheetRows: HTMLElement[];
   /** How many changes are waiting. The bar's shape follows this and nothing
       else, so there is one place to read the answer from. */
   private pending = 0;
@@ -90,7 +109,13 @@ export class Bar {
       button would blur it. */
   private shape = "";
 
-  constructor(cssHref: string, strings: BarStrings, dir: "ltr" | "rtl", buttons: BarButtons) {
+  constructor(
+    cssHref: string,
+    strings: BarStrings,
+    dir: "ltr" | "rtl",
+    buttons: BarButtons,
+    home?: BarHome
+  ) {
     /* A custom element name rather than a div: it cannot collide with a site's
        selectors, and it shows up in devtools as what it is. */
     this.host = document.createElement(HOST_TAG);
@@ -153,6 +178,12 @@ export class Bar {
     this.spacer = document.createElement("span");
     this.spacer.className = "bar__spacer";
 
+    this.homeLink = home ? anchor(home) : null;
+    /* Leaving by a link the sheet is holding. If the navigation is refused —
+       `beforeunload` over unsaved work — the sheet must not be left open on
+       top of the page it was covering. */
+    this.homeLink?.addEventListener("click", () => this.closeSheet());
+
     /* Nothing is removed from the bar by §2.2 — the rare controls move here.
        Full-width rows rather than a row of small ones: this opens on a phone,
        and the sheet is where the two irreversible-feeling things live. */
@@ -161,11 +192,14 @@ export class Bar {
     this.sheet.hidden = true;
     this.sheet.setAttribute("role", "group");
     this.sheet.setAttribute("aria-label", strings.moreTitle);
-    this.sheet.append(
+    /* Held rather than appended: Home is in this list while an owner is typing
+       and on the row itself at rest, and `layout()` is the one place that
+       decides which. Everything else in the sheet is in it always. */
+    this.sheetRows = [
       this.sheetItem(strings.discard, buttons.discard),
       this.sheetItem(strings.helpTitle, () => this.toggleHelp()),
       this.sheetItem(strings.done, buttons.exit)
-    );
+    ];
 
     this.note = document.createElement("p");
     this.note.className = "bar__note";
@@ -259,12 +293,17 @@ export class Bar {
       save:
 
           at rest    [status                              ]
-                     [                        ?      Done ]
+                     [                  ?    Home    Done ]
 
           typing     [Changing Eyebrow                    ]
                      [Undo this one       Save ②       ▾  ]
 
-      Two rows either way, where today's bar is three. */
+      Two rows either way, where 0.16.1's bar is three.
+
+      Home is top-level at rest and inside `▾` while typing, and that placement
+      is the whole of §2.3's compromise: an owner at rest is between jobs and
+      may want the other surface, while an owner mid-sentence wants Save and
+      nothing near it. It is still one tap from either state. */
   private layout(): void {
     const editing = this.pending > 0;
     const shape = `${editing ? "edit" : "rest"}:${this.revertShown}`;
@@ -273,6 +312,9 @@ export class Bar {
     /* The sheet belongs to the editing set. When the last change is saved or
        undone the button holding it open has gone, so the sheet goes with it. */
     if (!editing) this.closeSheet();
+    /* One anchor, two costumes: a row control beside Done, a full-width row
+       inside the sheet. `replaceChildren` moves it, so it is never in both. */
+    if (this.homeLink) this.homeLink.className = editing ? "bar__link btn--sheet" : "bar__link";
     this.actions.replaceChildren(
       ...(editing
         ? [
@@ -281,8 +323,13 @@ export class Bar {
             this.saveButton,
             this.moreButton
           ]
-        : [this.spacer, this.helpButton, this.exitButton])
+        : [this.spacer, this.helpButton, ...(this.homeLink ? [this.homeLink] : []), this.exitButton])
     );
+    const rows = [...this.sheetRows];
+    /* Before *Done*, after *How this works*: the sheet reads undo, learn, go
+       elsewhere, leave — and the way out stays last, where it was. */
+    if (editing && this.homeLink) rows.splice(2, 0, this.homeLink);
+    this.sheet.replaceChildren(...rows);
   }
 
   private toggleSheet(): void {
@@ -393,7 +440,6 @@ export interface BarStrings {
   done: string;
   helpEdit: string;
   helpCancel: string;
-  helpSave: string;
   helpPanel: string;
 }
 
@@ -406,12 +452,26 @@ function button(className: string, label: string, run: () => void): HTMLButtonEl
   return node;
 }
 
+function anchor(home: BarHome): HTMLAnchorElement {
+  const node = document.createElement("a");
+  node.className = "bar__link";
+  node.href = home.href;
+  node.textContent = home.label;
+  return node;
+}
+
+/* Three lines where 0.16.1 had four plus a conditional fifth, and §1.5
+   measured why: help was 400px, 47.4% of a phone screen, "half the page
+   disappearing behind six lines of prose, two of which point at a place the
+   bar will not take them". Those two are now one line, and it names a place
+   the bar can reach. What was dropped is said elsewhere at the moment it is
+   true — see the note beside `inlineHelpEdit` in `strings.ts`. */
 function helpList(strings: BarStrings): { wrap: HTMLElement; list: HTMLElement } {
   const wrap = document.createElement("div");
   const title = document.createElement("strong");
   title.textContent = strings.helpTitle;
   const list = document.createElement("ul");
-  for (const line of [strings.helpEdit, strings.helpCancel, strings.helpSave, strings.helpPanel]) {
+  for (const line of [strings.helpEdit, strings.helpCancel, strings.helpPanel]) {
     const item = document.createElement("li");
     item.textContent = line;
     list.append(item);

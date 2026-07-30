@@ -5,21 +5,33 @@
    a phone keyboard, and it is the reason the whole inline layer has been
    reachable in principle and unreachable in practice.
 
-   Two links close the loop, and both are built here so the two surfaces agree
-   about the spelling:
+   Three links close the loop, and all three are built here so the two surfaces
+   agree about the spelling:
 
      page → panel   the bar's "sign in" carries where it came from
+     page → panel   the bar's "Home" carries where it came from, and stays
      panel → page   after signing in, the panel goes straight back there, in
                     edit mode
 
-   `from` is a URL the browser will follow, and it arrives in the query string
-   where anyone can put anything. So it is validated rather than trusted: a
+   **`from` and `back` are two names for two intents and they are not
+   interchangeable.** `from` means *"I only came here to sign in, send me
+   back"*, and the panel acts on it before it renders a single control — a
+   `location.replace` out of `start()`. `back` means *"show me the panel, and
+   remember where I was"*. Home built on `from` would bounce an owner straight
+   back to the page they just left, with the panel flashing once on the way,
+   which is the whole of session 17 §2.3's warning.
+
+   Both are URLs the browser will follow, and both arrive in the query string
+   where anyone can put anything. So they are validated rather than trusted: a
    site-relative path, one leading slash, no scheme, no host. Without that,
    `/edit?from=https://example.com` is an open redirect wearing the editor's
    clothes — the owner taps a link on their own site and lands somewhere else,
    which is precisely the shape a phishing link wants. */
 
+import { LANG_PARAM } from "./strings.js";
+
 export const RETURN_PARAM = "from";
+export const BACK_PARAM = "back";
 export const EDIT_PARAM = "edit";
 
 /* Control characters are dropped or normalised at different points by
@@ -40,11 +52,64 @@ export function safeReturnPath(raw: string | null | undefined): string | null {
 }
 
 /** Where the bar sends someone who needs to sign in: the panel, remembering
-    the page they were on. */
-export function signInHref(editorPath: string, returnTo: string): string {
+    the page they were on.
+
+    `lang` because the page an owner is standing on is the best evidence there
+    is about which language they read, and the panel has none of its own — one
+    `/edit` serves both halves of a bilingual site. `strings.ts` has described
+    `?lang=` as "which the bar's links to the panel carry" since 0.17.0's first
+    step; this is the step where that stopped being a plan. */
+export function signInHref(editorPath: string, returnTo: string, lang?: string): string {
   const safe = safeReturnPath(returnTo);
-  if (!safe) return editorPath;
-  return `${editorPath}?${RETURN_PARAM}=${encodeURIComponent(safe)}`;
+  return withParams(editorPath, [
+    [RETURN_PARAM, safe],
+    [LANG_PARAM, lang]
+  ]);
+}
+
+/** Where the bar's Home goes: the panel itself, remembering the page rather
+    than being a way off it — and, where the owner tapped a particular sentence
+    to get here, naming the field they were pointing at.
+
+    The field rides in the panel's own hash rather than in a third parameter.
+    It is not a place the browser goes and it is not something the panel hands
+    to `location`; it is which control to open once the form is on screen, and
+    a fragment is what a fragment is for. `back`'s own hash — an owner two
+    thirds down a long page — survives inside the encoded value. */
+export function panelHref(
+  editorPath: string,
+  options: { back?: string | null; lang?: string; field?: string } = {}
+): string {
+  const href = withParams(editorPath, [
+    [BACK_PARAM, safeReturnPath(options.back)],
+    [LANG_PARAM, options.lang]
+  ]);
+  return options.field ? `${href}#${encodeURIComponent(options.field)}` : href;
+}
+
+function withParams(base: string, pairs: [string, string | null | undefined][]): string {
+  const params = new URLSearchParams();
+  for (const [name, value] of pairs) if (value) params.set(name, value);
+  const query = params.toString();
+  return query ? `${base}?${query}` : base;
+}
+
+/** The field the panel was asked to open, read off its own hash.
+
+    Matched against what a field path can be rather than trusted, and that is
+    not belt-and-braces: this ends up inside a `[data-path="…"]` selector, and
+    `#` is also where every other anchor on the internet lives. A hash that is
+    somebody's `#contact` is not a field and should quietly not be one. */
+export function fieldFromHash(hash: string | null | undefined): string | null {
+  if (!hash) return null;
+  let raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    /* A lone `%` — not a path, and not worth a second theory about. */
+    return null;
+  }
+  return /^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/.test(raw) ? raw : null;
 }
 
 /** The same page, in edit mode. Built by hand rather than through `URL` so it

@@ -227,7 +227,14 @@
   }
 }
 
-button {
+/* `.bar__link` is Home, and it is an anchor because it goes somewhere — see
+   `BarHome` in inline-bar.ts. It has to look like the controls beside it
+   without being one, so the box is spelled once for both rather than copied.
+   Scoped to the class rather than to `a`, because `.bar__note` also carries
+   anchors — "sign in again", "see the change" — and those are sentences with a
+   link in them, not controls. */
+button,
+.bar__link {
   appearance: none;
   margin: 0;
   /* 44px is the floor an owner's thumb needs; this is that, at any font size
@@ -244,11 +251,22 @@ button {
   white-space: nowrap;
 }
 
-button:hover:not(:disabled) {
+/* An anchor is not a button, so the 44px floor has to be met by laying the
+   text out rather than by the box growing around it. */
+.bar__link {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+button:hover:not(:disabled),
+.bar__link:hover {
   border-color: var(--sk-editor-accent, #6f93c9);
 }
 
-button:focus-visible {
+button:focus-visible,
+.bar__link:focus-visible {
   outline: 2px solid var(--sk-editor-accent-lit, #8fb0e0);
   outline-offset: 2px;
 }
@@ -311,11 +329,15 @@ button:disabled {
 .btn--sheet {
   inline-size: 100%;
   text-align: start;
+  /* The same alignment for the one row that is an anchor, where `text-align`
+     is not what decides it. */
+  justify-content: flex-start;
   border-color: transparent;
   color: var(--sk-editor-dim, rgba(231, 232, 236, 0.68));
 }
 
-.btn--sheet:hover:not(:disabled) {
+.btn--sheet:hover:not(:disabled),
+.bar__link.btn--sheet:hover {
   color: var(--sk-editor-ink, #e7e8ec);
   border-color: var(--sk-editor-accent, #6f93c9);
 }

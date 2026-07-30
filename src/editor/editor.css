@@ -122,18 +122,29 @@ body {
 
 .sk-editor__picker { margin-block: var(--sk-editor-gap); }
 
-/* The way onto the page itself. Deliberately given the same weight as the
-   picker rather than tucked in a corner: for an owner on a phone this is the
-   only route to inline editing that does not involve typing a query string,
-   and a route nobody finds is not a route. Sized for a thumb. */
-.sk-editor__onpage:empty { display: none; }
-.sk-editor__onpage {
-  margin-block-start: 0.75rem;
+/* The way onto the page itself, and back off it. Amended in 0.17.0, and the
+   old rule was `.sk-editor__onpage` under the picker with a paragraph about
+   how a route nobody finds is not a route.
+
+   The paragraph was right and the placement was measured wrong. §1.6 found
+   this link 1,088–1,246px down the panel on all three sites — off the bottom
+   of a phone screen, behind the welcome notice, the traffic block, the recent
+   changes and the picker itself. It is in the sticky footer now, beside Save,
+   which is the one strip of this panel that is on screen at every scroll
+   position. Still sized for a thumb. */
+.sk-editor__route:empty { display: none; }
+.sk-editor__route {
+  margin: 0;
+  /* After the file name, before Save — and the first to drop to its own line
+     when the three of them do not fit, because it is the only one of the three
+     that is not about the entry being edited. */
+  flex: 0 1 auto;
 }
-.sk-editor__onpage a {
+.sk-editor__route a {
   display: inline-block;
-  min-height: 44px;
-  padding: 0.6rem 0;
+  min-block-size: 44px;
+  /* Vertically centred against a 44px Save without a second flex context. */
+  line-height: 44px;
   font-size: 0.95rem;
 }
 

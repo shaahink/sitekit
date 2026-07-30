@@ -143,9 +143,17 @@ export interface EditorStrings {
   /** What the overflow button is called. The widget's own word for the same
       idea, so the two surfaces this kit ships do not invent two. */
   inlineMoreTitle: string;
+  /** The bar's way to the panel, and the panel's own name from the page.
+      "Home" rather than "the full editor": 7.7 made the panel the place an
+      owner arrives — what this is, who visited, what changed — and a place has
+      a name. §1.6 counted zero routes to it from the bar on all three sites
+      while the help text promised one twice. */
+  inlineHome: string;
   inlineHelpEdit: string;
   inlineHelpCancel: string;
-  inlineHelpSave: string;
+  /** Names Home, and this is the line the whole of §2.3 exists to make
+      truthful: it used to say "the full editor" from a bar with no way to
+      reach one. */
   inlineHelpPanel: string;
   /** Only added to the help when the page has a section that can be turned
       off, because it is only true of such a page. */
@@ -310,7 +318,7 @@ export const defaultStrings: EditorStrings = {
   inlineIdle: "Tap any highlighted text to change it.",
   inlineFocused: "Changing {what}",
   inlinePending: "{count} not saved yet.",
-  inlineNothing: "Nothing on this page can be edited here yet — try the full editor.",
+  inlineNothing: "Nothing on this page can be edited here yet — try Home.",
   inlineSignIn: "Sign in first, then come back to this page.",
   inlineSignInLink: "Sign in",
   inlineDone: "Done",
@@ -320,15 +328,21 @@ export const defaultStrings: EditorStrings = {
   inlineHelpTitle: "How this works",
   inlineMore: "▾",
   inlineMoreTitle: "More",
-  inlineHelpEdit: "Tap highlighted text and type. Nothing is public until you press Save.",
+  inlineHome: "Home",
+  /* Three lines where 0.16.1 had five, and every sentence that went is said
+     somewhere an owner meets it at the moment it is true. "Save sends
+     everything at once" is what the count on the button already shows; "the
+     page updates a minute or so later" is `savedNote`, said after a save
+     rather than before one. What is left is the two things the bar can be
+     asked at any moment and the one place everything else lives. */
+  inlineHelpEdit:
+    "Tap highlighted text and type. Save appears as soon as you change something, and nothing is public until you press it.",
   inlineHelpCancel: "Press Escape, or “Undo this one”, to put a piece of text back as it was.",
-  inlineHelpSave: "Save sends everything you changed at once. The page updates a minute or so later.",
-  inlineHelpPanel: "Greyed-out text has to be changed in the full editor.",
-  inlineHelpHidden:
-    "Whole sections can be turned off in the full editor. One that's off isn't on this page at all, so that's also where it comes back.",
-  inlinePanelOnly: "“{label}” has formatting in it, so it's edited in the full editor.",
-  inlinePanelElsewhere: "“{label}” is edited in the full editor, not here on the page.",
-  inlinePanelLink: "Open the full editor",
+  inlineHelpPanel: "Greyed-out text, your visitors, and everything else are in Home.",
+  inlineHelpHidden: "Whole sections can be turned on and off in Home too — a section that's off isn't on this page at all.",
+  inlinePanelOnly: "“{label}” has formatting in it, so it's changed in Home.",
+  inlinePanelElsewhere: "“{label}” is changed in Home, not here on the page.",
+  inlinePanelLink: "Open Home",
   inlineBroken: "This points at “{path}”, which the content no longer has.",
   inlineBrokenSome:
     "Some text on this page (marked red) points at content that no longer exists. That's a fault in the page, not in anything you did — everything else here still works.",
@@ -485,7 +499,7 @@ const fr: EditorStrings = {
   inlineIdle: "Touchez un texte surligné pour le changer.",
   inlineFocused: "Vous changez {what}",
   inlinePending: "{count} à enregistrer.",
-  inlineNothing: "Rien sur cette page ne peut encore être modifié ici — essayez l’éditeur complet.",
+  inlineNothing: "Rien sur cette page ne peut encore être modifié ici — essayez Accueil.",
   inlineSignIn: "Connectez-vous d’abord, puis revenez à cette page.",
   inlineSignInLink: "Se connecter",
   inlineDone: "Terminé",
@@ -495,18 +509,17 @@ const fr: EditorStrings = {
   inlineHelpTitle: "Comment ça marche",
   inlineMore: "▾",
   inlineMoreTitle: "Plus",
+  inlineHome: "Accueil",
   inlineHelpEdit:
-    "Touchez un texte surligné et écrivez. Rien n’est public tant que vous n’appuyez pas sur Enregistrer.",
+    "Touchez un texte surligné et écrivez. Enregistrer apparaît dès que vous changez quelque chose, et rien n’est public tant que vous n’appuyez pas dessus.",
   inlineHelpCancel:
     "Appuyez sur Échap, ou sur « Annuler celui-ci », pour remettre un texte comme il était.",
-  inlineHelpSave:
-    "Enregistrer envoie tout ce que vous avez changé d’un coup. La page se met à jour une minute environ plus tard.",
-  inlineHelpPanel: "Le texte en gris se change dans l’éditeur complet.",
+  inlineHelpPanel: "Le texte en gris, vos visiteurs et tout le reste sont dans Accueil.",
   inlineHelpHidden:
-    "Des sections entières peuvent être masquées dans l’éditeur complet. Une section masquée n’est pas du tout sur cette page, c’est donc aussi là qu’elle revient.",
-  inlinePanelOnly: "« {label} » contient de la mise en forme, il se modifie donc dans l’éditeur complet.",
-  inlinePanelElsewhere: "« {label} » se modifie dans l’éditeur complet, pas ici sur la page.",
-  inlinePanelLink: "Ouvrir l’éditeur complet",
+    "Des sections entières se masquent et se réaffichent dans Accueil — une section masquée n’est pas du tout sur cette page.",
+  inlinePanelOnly: "« {label} » contient de la mise en forme, il se modifie donc dans Accueil.",
+  inlinePanelElsewhere: "« {label} » se modifie dans Accueil, pas ici sur la page.",
+  inlinePanelLink: "Ouvrir Accueil",
   inlineBroken: "Ceci pointe vers « {path} », que le contenu n’a plus.",
   inlineBrokenSome:
     "Une partie du texte de cette page (marquée en rouge) pointe vers du contenu qui n’existe plus. C’est un défaut de la page, pas de ce que vous avez fait — tout le reste fonctionne.",
@@ -650,7 +663,7 @@ const fa: EditorStrings = {
   inlineIdle: "روی هر متن هایلایت‌شده بزن تا عوضش کنی.",
   inlineFocused: "در حال تغییر {what}",
   inlinePending: "{count} هنوز ذخیره نشده.",
-  inlineNothing: "فعلاً چیزی در این صفحه از همین‌جا عوض نمی‌شود — ویرایشگر کامل را امتحان کن.",
+  inlineNothing: "فعلاً چیزی در این صفحه از همین‌جا عوض نمی‌شود — خانه را امتحان کن.",
   inlineSignIn: "اول وارد شو، بعد به این صفحه برگرد.",
   inlineSignInLink: "ورود",
   inlineDone: "تمام",
@@ -660,16 +673,17 @@ const fa: EditorStrings = {
   inlineHelpTitle: "این چطور کار می‌کند",
   inlineMore: "▾",
   inlineMoreTitle: "بیشتر",
-  inlineHelpEdit: "روی متن هایلایت‌شده بزن و بنویس. تا ذخیره را نزنی هیچ‌چیز عمومی نمی‌شود.",
+  inlineHome: "خانه",
+  inlineHelpEdit:
+    "روی متن هایلایت‌شده بزن و بنویس. تا چیزی را عوض کنی دکمه‌ی ذخیره ظاهر می‌شود، و تا نزنی‌اش هیچ‌چیز عمومی نمی‌شود.",
   inlineHelpCancel:
     "برای اینکه یک متن به حالت اولش برگردد، Escape را بزن یا «همین یکی را برگردان».",
-  inlineHelpSave: "ذخیره همه‌ی تغییرها را یک‌جا می‌فرستد. صفحه حدود یک دقیقه بعد به‌روز می‌شود.",
-  inlineHelpPanel: "متن خاکستری را باید در ویرایشگر کامل عوض کرد.",
+  inlineHelpPanel: "متن خاکستری، بازدیدکننده‌هایت و بقیه‌ی چیزها در خانه هستند.",
   inlineHelpHidden:
-    "بخش‌های کامل را می‌شود در ویرایشگر کامل خاموش کرد. بخشی که خاموش است اصلاً روی این صفحه نیست، پس همان‌جا هم برمی‌گردد.",
-  inlinePanelOnly: "«{label}» قالب‌بندی دارد، برای همین در ویرایشگر کامل عوض می‌شود.",
-  inlinePanelElsewhere: "«{label}» در ویرایشگر کامل عوض می‌شود، نه همین‌جا روی صفحه.",
-  inlinePanelLink: "ویرایشگر کامل را باز کن",
+    "بخش‌های کامل را هم در خانه می‌شود خاموش و روشن کرد — بخشی که خاموش است اصلاً روی این صفحه نیست.",
+  inlinePanelOnly: "«{label}» قالب‌بندی دارد، برای همین در خانه عوض می‌شود.",
+  inlinePanelElsewhere: "«{label}» در خانه عوض می‌شود، نه همین‌جا روی صفحه.",
+  inlinePanelLink: "خانه را باز کن",
   inlineBroken: "این به «{path}» اشاره می‌کند که دیگر در محتوا نیست.",
   inlineBrokenSome:
     "بخشی از متن این صفحه (با قرمز مشخص شده) به محتوایی اشاره می‌کند که دیگر وجود ندارد. این ایراد خود صفحه است، نه کاری که تو کرده‌ای — بقیه‌اش همچنان کار می‌کند.",

@@ -27,7 +27,7 @@ import type { Field } from "../cms/fields.js";
 import { Dirty } from "./dirty.js";
 import { clearDraft, draftKey, readDraft, saveDraft, type Draft } from "./drafts.js";
 import { Bar, type SaveState } from "./inline-bar.js";
-import { signInHref } from "./return-to.js";
+import { EDIT_PARAM, panelHref, signInHref } from "./return-to.js";
 import { digitsFor, dirFor, editorStrings, fill, type EditorStrings } from "./strings.js";
 import { coerce, findField, plural, valueAt } from "./values.js";
 
@@ -137,6 +137,20 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
      error is still relevant while someone types. */
   let noteIsStaleOnEdit = false;
 
+  /** This page, as a path the panel can hand back to `editHref` — without the
+      `edit=1` that put us in edit mode, because `editHref` puts it back and
+      `?edit=1&edit=1` is not a URL an owner could have arrived at by hand.
+      Everything else the page was carrying stays: `?review=` is how a site
+      shows a draft, and coming back to the published page instead would be a
+      different page. The hash goes too — an owner two thirds down a long page
+      should come back to the paragraph they were reading. */
+  function herePath(): string {
+    const url = new URL(location.href);
+    url.searchParams.delete(EDIT_PARAM);
+    const query = url.searchParams.toString();
+    return `${url.pathname}${query ? `?${query}` : ""}${url.hash}`;
+  }
+
   const bar = new Bar(cssHref, {
     regionLabel: strings.inlineHelpTitle,
     save: strings.save,
@@ -149,18 +163,24 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     done: strings.inlineDone,
     helpEdit: strings.inlineHelpEdit,
     helpCancel: strings.inlineHelpCancel,
-    helpSave: strings.inlineHelpSave,
     helpPanel: strings.inlineHelpPanel
   }, dirFor(lang), {
     save: () => void commit(),
     revert: () => revertFocused(),
     discard: () => discardAll(),
     exit: () => exit()
+  }, {
+    /* §1.6: zero routes out of this bar on all three sites, while the help
+       text promised one twice. This is the route, and it carries the page
+       rather than being a way off it — `back`, never `from`, which the panel
+       would act on by sending the owner straight back here. */
+    href: panelHref(editorPath, { back: herePath(), lang }),
+    label: strings.inlineHome
   });
 
   if (!annotated.length) {
     idle(strings.inlineNothing);
-    bar.setNote("", { link: { href: editorPath, label: strings.inlinePanelLink } });
+    bar.setNote("", { link: { href: panelHref(editorPath, { back: herePath(), lang }), label: strings.inlinePanelLink } });
     return;
   }
 
@@ -252,9 +272,30 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
 
     if (verdict.kind === "panel") {
       element.dataset.skEditState = "panel";
-      element.title = fill(
+      const why = fill(
         verdict.why === "formatting" ? strings.inlinePanelOnly : strings.inlinePanelElsewhere,
         { label: verdict.label }
+      );
+      element.title = why;
+      /* A `title` is a tooltip, and a phone has no pointer to hover with — so
+         on the device this editor is for, the greyed-out sentence has always
+         explained itself to nobody. Tapping it says the same thing in the bar,
+         where there is room for the way to fix it as well: the panel, opened
+         at this exact field (§2.3, "the links land on places, not pages").
+
+         Not `continue`d past — the listener hangs off the same AbortController
+         as every other one, so leaving edit mode takes it with it. */
+      element.addEventListener(
+        "click",
+        () => {
+          bar.setNote(why, {
+            link: {
+              href: panelHref(editorPath, { back: herePath(), lang, field: path }),
+              label: strings.inlinePanelLink
+            }
+          });
+        },
+        on
       );
       warn(path, verdict.reason);
       continue;
@@ -649,11 +690,11 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     };
   }
 
-  /** The panel, told which page to send them back to. The hash goes along:
-      an owner two thirds of the way down a long page should come back to the
-      paragraph they were reading, not to the top of it. */
+  /** The panel, told which page to send them back to — and which language to
+      say it in, since the page an owner is standing on is the only evidence
+      the panel gets about that. */
   function signInBack(): string {
-    return signInHref(editorPath, `${location.pathname}${location.hash}`);
+    return signInHref(editorPath, herePath(), lang);
   }
 
   function idle(text: string): void {
@@ -707,7 +748,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     }
     /* Leaving edit mode should leave the URL an owner could send to someone. */
     const url = new URL(location.href);
-    url.searchParams.delete("edit");
+    url.searchParams.delete(EDIT_PARAM);
     history.replaceState(null, "", url);
   }
 

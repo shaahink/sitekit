@@ -28,7 +28,7 @@ import { cssEscape, el, labelled, link } from "./dom.js";
 import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
 import { render, Uploads, type RenderContext } from "./render.js";
-import { editHref, RETURN_PARAM, safeReturnPath } from "./return-to.js";
+import { BACK_PARAM, editHref, fieldFromHash, RETURN_PARAM, safeReturnPath } from "./return-to.js";
 import {
   digitsFor,
   dirFor,
@@ -149,6 +149,20 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
   const returnTo = safeReturnPath(
     new URLSearchParams(location.search).get(RETURN_PARAM)
   );
+
+  /* Where the owner was when they asked for *this*. `from` above is a journey
+     to finish and is acted on before a control is drawn; `back` is a place to
+     remember and is offered rather than taken. Two intents, two names — see
+     return-to.ts's header, and §2.3, which is the section this whole parameter
+     exists to satisfy. */
+  const backTo = safeReturnPath(new URLSearchParams(location.search).get(BACK_PARAM));
+
+  /* And which field they were pointing at, where they got here by tapping a
+     greyed-out sentence on their own page. Spent once: it is the answer to
+     "why did I open the panel", not a preference, and re-applying it every
+     time the picker changes would drag an owner who moved on somewhere they
+     have already been. */
+  let wantedField = fieldFromHash(location.hash);
 
   async function start(): Promise<void> {
     element.textContent = "";
@@ -329,16 +343,47 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     }
     picker.append(labelled(strings.editing, select));
 
+    /* Arriving from a page means arriving to edit *that* page. Without this an
+       owner who tapped Home on the Farsi half of a bilingual site would land
+       on the English entry — the picker's first option — and the field the bar
+       named would either be missing or be the wrong language's. The site
+       already declares these URLs for the reverse direction, so this costs a
+       lookup and no new configuration. */
+    if (backTo) {
+      const here = pathOf(backTo);
+      for (const [value, url] of urls) {
+        if (pathOf(url) === here) {
+          select.value = value;
+          break;
+        }
+      }
+    }
+
     /* Rebuilt rather than kept and re-pointed: an anchor that is sometimes
        there and sometimes not is one fewer state than an anchor that is
-       always there and sometimes lies about where it goes. */
-    const onPage = el("p", "sk-editor__onpage");
-    const showOnPage = (): void => {
-      onPage.textContent = "";
+       always there and sometimes lies about where it goes.
+
+       It lives in the sticky footer since 0.17.0 and not here. §1.6 measured
+       it 1,088–1,246px down the panel on all three sites — off the bottom of
+       a phone, behind the welcome notice, the traffic, the changes and the
+       picker — which is a route that exists and cannot be found. The footer is
+       already `position: sticky` (`editor.css`), which is why Save is on
+       screen at every scroll position, and there is exactly one other thing
+       that deserves to be. */
+    const route = el("p", "sk-editor__route");
+    const showRoute = (): void => {
+      route.textContent = "";
+      /* One route, not two: *Back to the page* when the owner came from one —
+         `strings.backToPage` was written for this and referenced by nothing
+         until now — and *Edit this page on the site* otherwise. Two links to
+         two nearly-identical places is how a footer stops being read. */
+      if (backTo) {
+        route.append(link(editHref(backTo), strings.backToPage));
+        return;
+      }
       const url = urls.get(select.value);
-      if (url) onPage.append(link(editHref(url), strings.openPage));
+      if (url) route.append(link(editHref(url), strings.openPage));
     };
-    picker.append(onPage);
 
     /* Above the picker, because it is what an owner arrives with: what is
        this, did anyone come, did my last change go live. It is built empty and
@@ -364,20 +409,70 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       .catch(() => {});
 
     select.addEventListener("change", () => {
-      showOnPage();
-      void load(select.value, form, footer);
+      showRoute();
+      void load(select.value, form, footer, route);
     });
-    showOnPage();
-    void load(select.value, form, footer);
+    showRoute();
+    void load(select.value, form, footer, route);
   }
 
-  async function load(value: string, form: HTMLElement, footer: HTMLElement): Promise<void> {
+  /** A path with its query, its hash and its trailing slash taken off, for
+      comparing one route's idea of a page with another's.
+
+      The trailing slash is not fussiness. Measured on nimagiti: its schema
+      declares `entryUrl: { "home.fa": "/fa" }` while Astro's default
+      `build.format` serves that page at `/fa/`, so the browser's own
+      `location.pathname` and the site's own configuration disagree about the
+      same page by one character. Without this, an owner tapping Home on the
+      Farsi half of a bilingual site lands on the English entry. */
+  function pathOf(url: string): string {
+    const path = url.split(/[?#]/)[0] ?? url;
+    return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  }
+
+  /** The panel was asked for a particular field, by the hash on its own URL.
+      The bar's greyed-out-text route names one: an owner who tapped a sentence
+      that cannot be edited in place should land on the control that changes
+      it, not on a form to search.
+
+      Ancestors are opened from the element outwards rather than at the top
+      level, so §2.4's collapse — which is the next step, and which makes this
+      matter far more than it does today — inherits this for free and a nested
+      collapse later needs nothing. */
+  function revealField(form: HTMLElement, path: string): void {
+    const target = form.querySelector<HTMLElement>(`[data-path="${cssEscape(path)}"]`);
+    if (!target) return;
+    for (let node = target.parentElement; node; node = node.parentElement) {
+      if (node instanceof HTMLDetailsElement) node.open = true;
+    }
+    target.scrollIntoView({ block: "center" });
+    /* Focused as well as scrolled to, because "which one did it mean?" is a
+       question a caret answers and a scroll position does not. Guarded: a
+       control the browser refuses to focus must not take the panel down. */
+    try {
+      target.focus({ preventScroll: true });
+    } catch {
+      /* Then it is merely scrolled to, which was the whole ask. */
+    }
+  }
+
+  async function load(
+    value: string,
+    form: HTMLElement,
+    footer: HTMLElement,
+    route: HTMLElement
+  ): Promise<void> {
     const slash = value.indexOf("/");
     const collection = value.slice(0, slash);
     const entry = value.slice(slash + 1);
 
     form.textContent = "";
     footer.textContent = "";
+    /* The route goes back immediately, before the fetch. A load that fails
+       must not also take away the way out of the failure — and until 0.17.0
+       it could not, because this link lived beside the picker rather than in
+       the footer this line clears. It is re-ordered into place below. */
+    footer.append(route);
     form.append(el("p", "sk-editor__status", strings.loading));
 
     let response: Response;
@@ -441,7 +536,19 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     };
 
     for (const field of body.fields) form.append(render(field, body.values, context));
-    footer.append(note, save);
+    /* What file is open, the way to the other surface, and Save — in that
+       order, so Save stays at the end of the row where a thumb already knows
+       to find it (`justify-content: space-between`). All three on screen at
+       every scroll position, which is what §2.3 asked the footer for.
+       `replaceChildren` rather than `append`, because the route is already in
+       here and this is where it takes its place in the middle. */
+    footer.replaceChildren(note, route, save);
+
+    /* After the fields exist, because it is one of them it is looking for. */
+    if (wantedField) {
+      revealField(form, wantedField);
+      wantedField = null;
+    }
 
     let sha = body.sha;
     save.addEventListener("click", () => {
