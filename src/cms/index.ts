@@ -8,6 +8,11 @@ export {
   type HandoffHandlerOptions
 } from "./handoff.js";
 export {
+  createPasskeyHandler,
+  type PasskeyHandler,
+  type PasskeyHandlerOptions
+} from "./passkey.js";
+export {
   signTicket,
   verifyTicket,
   ticketJwks,

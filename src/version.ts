@@ -18,4 +18,4 @@
    same shape as the lesson `fleet-migrate.test.mjs` cost — assert against what
    the source of truth actually says, never against a second hand-written
    string standing in for it. */
-export const KIT_VERSION = "0.23.0";
+export const KIT_VERSION = "0.23.1";
