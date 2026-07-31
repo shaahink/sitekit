@@ -1,9 +1,10 @@
-/* The credit line — one sentence, three languages, five clients' footers.
+/* The credit line — one sentence, English, six clients' footers.
    ---------------------------------------------------------------------------
    This is the most-published string the kit emits: it is on every page of
-   every site in the fleet, in whichever language that page is written in. The
-   cost of getting it wrong is a deploy per site to fix, so it is worth more
-   assertions than its size suggests. */
+   every site in the fleet, and since 0.24.0 it is the same sentence on all of
+   them whatever language the page is written in. The cost of getting it wrong
+   is a deploy per site to fix, so it is worth more assertions than its size
+   suggests. */
 
 import { describe, expect, it } from "vitest";
 import { creditLine, credits, creditsAnchor, creditsFor } from "../src/credits/index.js";
@@ -11,41 +12,47 @@ import { creditLine, credits, creditsAnchor, creditsFor } from "../src/credits/i
 const base = { siteName: "Elfine Radwanski", siteUrl: "https://elfine.example/" };
 
 describe("creditLine", () => {
-  it("says it in English by default", () => {
+  it("says it in English", () => {
     expect(creditLine(base)).toContain(">sk</a> made this");
   });
 
-  it("says it in French", () => {
-    expect(creditLine({ ...base, lang: "fr" })).toContain(">sk</a> a fait ce site");
+  it("says it in English on a page that is not", () => {
+    /* The whole of 0.24.0, and the reason it is worth six assertions rather
+       than one: every one of these was a different sentence a release ago, and
+       two of them are on live client pages right now. A translation coming
+       back would be a regression somebody has to spend six deploys to undo. */
+    for (const lang of ["fr", "fa", "fa-IR", "FR", "de", "fao", ""]) {
+      const line = creditLine({ ...base, lang });
+      expect(line, lang).toContain(">sk</a> made this");
+    }
   });
 
-  it("puts the name where Persian word order puts it", () => {
-    /* The whole reason this is a template rather than a suffix: in Farsi the
-       name is in the middle of the sentence. Anything built by appending
-       would read correctly in two languages and be wrong in the third. */
-    const line = creditLine({ ...base, lang: "fa" });
-    expect(line).toContain("این سایت را <a");
-    expect(line).toContain(">sk</a> ساخته");
+  it("leaves no Persian or French behind in the module at all", () => {
+    /* Asserted on the output rather than on the source, because a table that
+       is merely unreachable is a table somebody re-reaches. The two strings
+       that were on mosleh's 21 pages and elfine's French pages: gone. */
+    const every = ["fa", "fr", "en", undefined].map((lang) =>
+      lang === undefined ? creditLine(base) : creditLine({ ...base, lang })
+    );
+    for (const line of every) {
+      expect(line).not.toContain("ساخته");
+      expect(line).not.toContain("a fait ce site");
+    }
   });
 
-  it("takes a region tag and ignores it", () => {
-    expect(creditLine({ ...base, lang: "fa-IR" })).toContain("ساخته");
-    expect(creditLine({ ...base, lang: "FR" })).toContain("a fait ce site");
+  it("declares the language it is in, on pages that are in another", () => {
+    /* An English sentence in a Farsi footer. The Latin glyphs lay themselves
+       out correctly without help; the declaration is for a screen reader,
+       which should switch voice rather than spell three English words in
+       Persian. */
+    expect(creditLine({ ...base, lang: "fa" })).toContain('lang="en"');
+    expect(creditLine({ ...base, lang: "fa" })).toContain('dir="ltr"');
   });
 
-  it("does not mistake Faroese for Farsi", () => {
-    /* `fao` starts with `fa`. A prefix match here would put a Persian sentence
-       on a Faroese page — the same bug the editor's tables were careful about,
-       in a second place. */
-    expect(creditLine({ ...base, lang: "fao" })).toContain("made this");
-  });
-
-  it("falls back to English rather than to nothing", () => {
-    /* An unknown language showing an English credit is a small oddity. One
-       showing an empty span has silently dropped the acquisition channel the
-       whole module exists for. */
-    expect(creditLine({ ...base, lang: "de" })).toContain("made this");
-    expect(creditLine({ ...base, lang: "" })).toContain("made this");
+  it("still keeps the class hook the sites style", () => {
+    /* Six stylesheets have a rule for this class. A change to the sentence
+       must not become a change to the selector. */
+    expect(creditLine(base)).toContain('class="sk-creditline"');
   });
 });
 
@@ -74,7 +81,7 @@ describe("the anchor inside it", () => {
 describe("what a footer embeds", () => {
   it("pairs the sentence with the schema.org claim", () => {
     const html = creditsFor({ ...base, lang: "fr" });
-    expect(html).toContain("a fait ce site");
+    expect(html).toContain("made this");
     expect(html).toContain('"@type":"WebSite"');
     expect(html).toContain('"creator"');
   });

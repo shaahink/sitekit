@@ -58,51 +58,56 @@ export function creditsAnchor(options: CreditsOptions): string {
   );
 }
 
-/* The credit line, in the three languages the fleet's visitors read.
+/* The credit line — one sentence, English, on every page of every site.
    ---------------------------------------------------------------------------
    Until 0.23.0 the kit handed back a bare anchor and each site wrapped it in
    its own words, which produced four different credits across five sites:
    behrooz said "Created by sk", shade put it after a copyright symbol,
    nimagiti and mosleh showed the bare name. Nobody decided that; it accreted.
-   So the whole phrase moves here and the sites stop owning any of it.
+   So the whole phrase moved here and the sites stopped owning any of it.
 
-   `{sk}` is where the anchor goes. A template with a placeholder rather than
-   three concatenations, because the word order genuinely differs — Farsi puts
-   the object first and the verb last, so "sk" is in the middle of the Persian
-   sentence and at the start of the other two. Anything built by gluing a name
-   to a suffix would have been wrong in Persian and looked fine in review.
+   0.23.0 translated it — French on elfine, Farsi on nimagiti's `/fa` and on
+   all 21 of mosleh's pages. **0.24.0 stops.** This line is not the site's
+   speech, it is the studio's signature, and a signature is the one string on
+   a page that does not belong to the reader's language: it names sk, it points
+   at sk's own site, and that site is in English whichever footer sent somebody
+   to it. Three spellings of one studio's name also made the credit read as
+   part of the client's copy rather than as an attribution under it.
 
-   The register matches the fleet's own tables: French follows elfine's, Farsi
-   follows nimagiti's. Neither is word-for-word; both say what the English
-   says. */
-const CREDIT_LINES: Record<string, string> = {
-  en: "{sk} made this",
-  fr: "{sk} a fait ce site",
-  fa: "این سایت را {sk} ساخته"
-};
-
-/** The primary subtag, lowercased: `fa-IR` and `FA` both give `fa`. Split
-    rather than prefix-matched, so `fao` is Faroese and not Farsi — the same
-    bug the editor's own tables were careful about. */
-function primary(lang: string | null | undefined): string {
-  return (lang ?? "").toLowerCase().split(/[-_]/)[0] ?? "";
-}
+   `{sk}` stays a placeholder rather than becoming a suffix, even though
+   English puts the name at the start. It is what makes the sentence one
+   editable string instead of a concatenation, and the day the wording changes
+   again the change is inside these quotes and nowhere else. */
+const CREDIT_LINE = "{sk} made this";
 
 export interface CreditLineOptions extends CreditsOptions {
-  /** The page's language. Anything the kit has no line for falls back to
-      English rather than to a blank — a site in a fourth language showing an
-      English credit is a small oddity; one showing nothing at all has lost the
-      acquisition channel PLAN §3.3 is built on. */
+  /** The page's language — **accepted and ignored since 0.24.0.**
+
+      Kept on the interface rather than deleted, because the type is what six
+      site repos compile against: `creditsFor({ …, lang: "fa" })` is written
+      into mosleh's footer on `main` today, and removing the property would
+      turn a footer change into a build break in every repo that had not been
+      edited yet. A site may stop passing it whenever it likes. */
   lang?: string;
 }
 
 /** The visible credit, whole: `sk made this`, with `sk` as the link.
     Presentation still belongs to the site — this returns a `<span>` with a
-    class hook and no styling of its own. */
+    class hook and no styling of its own.
+
+    `lang="en" dir="ltr"`, stated on the span, because since 0.24.0 this is an
+    English sentence that lands on Farsi and French pages too. The Latin run
+    would lay itself out left-to-right regardless — the declaration is for the
+    reader a browser cannot see: a screen reader announcing a Persian page
+    should switch voice for these three words rather than spell them out, and
+    `dir` keeps the sentence intact if the label it is built around ever stops
+    being pure Latin. */
 export function creditLine(options: CreditLineOptions): string {
-  const template = CREDIT_LINES[primary(options.lang)] ?? CREDIT_LINES["en"]!;
   const anchor = creditsAnchor(options);
-  return `<span class="sk-creditline">${template.replace("{sk}", anchor)}</span>`;
+  return (
+    `<span class="sk-creditline" lang="en" dir="ltr">` +
+    `${CREDIT_LINE.replace("{sk}", anchor)}</span>`
+  );
 }
 
 /** The machine-readable claim: this WebSite's creator is the sk organisation. */
