@@ -42,6 +42,9 @@ const NOT_LANGUAGE: (keyof EditorStrings)[] = [
   /* The overflow glyph, for the same reason as "?" — and its *name*,
      `inlineMoreTitle`, is what the three tables translate. */
   "inlineMore",
+  /* The hint's dismiss glyph, and the same rule again: `hintDismissTitle` is
+     the string with words in it and it is translated in all three tables. */
+  "hintDismiss",
   "homeHelp",
   "homePageLine"
 ];

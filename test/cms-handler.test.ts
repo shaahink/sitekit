@@ -142,6 +142,50 @@ describe("the gate", () => {
     expect(response.status).toBe(403);
   });
 
+  /* The device marker `editor/hint.ts` writes so an owner can find their own
+     editor. It is a key and an expiry in a site's own `localStorage`, it grants
+     nothing, and this is the assertion that says so against the real gate
+     rather than in a comment: offered as a cookie, offered as a header, offered
+     beside a session belonging to somebody who is not allowed here, it changes
+     the answer by not one byte. Nothing in the kit reads it server-side, and
+     the day something starts to, these fail. */
+  describe("the device marker grants nothing", () => {
+    const marker = String(Date.now() + 90 * 86_400_000);
+
+    it("is not a session, however it is offered", async () => {
+      const plain = await handler.GET(get("?collection=home"));
+      const asCookie = await handler.GET(get("?collection=home", { cookie: `sk-edit-here=${marker}` }));
+      const asHeader = await handler.GET(get("?collection=home", { "x-sk-edit-here": marker }));
+
+      expect(plain.status).toBe(401);
+      expect(asCookie.status).toBe(401);
+      expect(asHeader.status).toBe(401);
+      const refusal = await plain.text();
+      expect(await asCookie.text()).toBe(refusal);
+      expect(await asHeader.text()).toBe(refusal);
+    });
+
+    it("does not get an account past the allowlist", async () => {
+      const response = await handler.GET(
+        get("?collection=home", {
+          cookie: `${await cookie("stranger@example.com")}; sk-edit-here=${marker}`
+        })
+      );
+      expect(response.status).toBe(403);
+    });
+
+    it("does not survive a session being rejected — a write is refused the same way", async () => {
+      const response = await handler.POST(
+        post(
+          { collection: "home", edits: [], sha: "sha-original" },
+          { cookie: `sk-edit-here=${marker}` }
+        )
+      );
+      expect(response.status).toBe(401);
+      expect(puts).toHaveLength(0);
+    });
+  });
+
   it("refuses a write from another origin", async () => {
     const response = await handler.POST(
       post({ collection: "home", edits: [], sha: "x" }, { origin: "https://evil.test", cookie: await cookie() })

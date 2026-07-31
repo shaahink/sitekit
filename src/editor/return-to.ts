@@ -33,6 +33,14 @@ import { LANG_PARAM } from "./strings.js";
 export const RETURN_PARAM = "from";
 export const BACK_PARAM = "back";
 export const EDIT_PARAM = "edit";
+/** Where the tab remembers the answer, so an owner can navigate their own site
+    while editing without `?edit=1` riding along in every link they might then
+    copy. `inline-gate.ts` spells it a second time because nothing may import
+    from that file — see its header, and `editor-hint.test.ts` for the test
+    that holds the two spellings together. Bug #43 was this key spelled twice
+    with nothing linking them at all, so a rename would have left "leave edit
+    mode" writing to a key nobody reads and edit mode surviving the exit. */
+export const EDIT_MODE = "sk-edit-mode";
 /** How a refused hand-off says so. The callback in `cms/auth.ts` cannot put a
     reason in a body — it is a redirect — so it puts one here and the panel says
     it in the owner's own language. Values: `denied`, `down`, `failed`. */

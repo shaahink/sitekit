@@ -274,6 +274,20 @@ export interface EditorStrings {
       clear the flag. */
   inlineHelpTourAgain: string;
 
+  /* --- the way in, on the owner's own page (0.20.0, session 24) ---------- */
+
+  /** The whole of the affordance a marked device is shown, and it says what
+      tapping it does rather than naming the tool: an owner is standing on the
+      page, and "this page" is the thing they can see. */
+  hintEdit: string;
+  /** The glyph, hidden from a screen reader by `hintDismissTitle` the way
+      `inlineMore` is by `inlineMoreTitle`. */
+  hintDismiss: string;
+  /** What dismissing means, said exactly: the device forgets, so this is not
+      "hide for now". On a shared family device that is the honest offer, and
+      it is undone by signing in and editing again rather than by a setting. */
+  hintDismissTitle: string;
+
   /* --- the owner's home (7.7) -------------------------------------------- */
 
   /** The first-run panel. Three sentences and a button, not a tour: what this
@@ -484,6 +498,10 @@ export const defaultStrings: EditorStrings = {
   tourSkip: "Skip",
   tourDone: "Got it",
   inlineHelpTourAgain: "Show me how again",
+
+  hintEdit: "Edit this page",
+  hintDismiss: "×",
+  hintDismissTitle: "Don't offer this on this device",
 
   /* --- the owner's home -------------------------------------------------- */
 
@@ -697,6 +715,10 @@ const fr: EditorStrings = {
   tourDone: "C’est compris",
   inlineHelpTourAgain: "Remontrez-moi",
 
+  hintEdit: "Modifier cette page",
+  hintDismiss: "×",
+  hintDismissTitle: "Ne plus proposer ceci sur cet appareil",
+
   homeWelcomeTitle: "C’est ici que vous changez votre site",
   homeWelcomeBody:
     "Tout ce que vous écrivez ici va sur votre vrai site, en général en une ou deux minutes. Vous pouvez aussi toucher les mots sur vos propres pages et écrire par-dessus.",
@@ -893,6 +915,10 @@ const fa: EditorStrings = {
   tourSkip: "رد کن",
   tourDone: "فهمیدم",
   inlineHelpTourAgain: "دوباره نشانم بده",
+
+  hintEdit: "این صفحه را ویرایش کن",
+  hintDismiss: "×",
+  hintDismissTitle: "دیگر این را روی این دستگاه پیشنهاد نده",
 
   homeWelcomeTitle: "اینجا جایی است که سایتت را عوض می‌کنی",
   homeWelcomeBody:

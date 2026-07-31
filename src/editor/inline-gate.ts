@@ -17,6 +17,15 @@
    This is not a permission. Anyone may set it; the server is what decides, and
    an unauthenticated visitor who sets it gets a bar that says to sign in.
 
+   Since 0.20.0 it asks one more question when edit mode is off, and it is the
+   cheapest question there is: does this device carry the marker `hint.ts`
+   writes after the server has accepted an editor request here? A visitor has
+   no marker, reaches `return` one `localStorage.getItem` later and requests
+   nothing — which is the whole constraint, because a footer link would have
+   solved the same problem by showing the door to everyone. The marker grants
+   nothing and no handler reads it; `hint.ts` explains why it can be trusted
+   with nothing and still be useful.
+
    **A function rather than a side-effecting module, and that is load-bearing.**
    The kit declares `sideEffects: false`, which is true of every other file in
    it and lets bundlers drop what a site does not use. A bare
@@ -28,7 +37,25 @@
 
 import type { InlineOptions } from "./inline.js";
 
+/* **Nothing may import from this file, and that is a measurement rather than a
+   preference.** Rollup will not fold a module into an entry chunk if a lazily
+   imported chunk also imports it, so one `import { STORE } from
+   "./inline-gate.js"` anywhere took the whole gate out of Base.astro's chunk
+   and gave every public page a second script to fetch: 507 bytes plus a new
+   1.9 kB `inline-gate.<hash>.js`, where there had been one 2.2 kB chunk.
+   Measured on a real site-template build while A2.2 was being written. Both
+   keys below are therefore private, and `hint.ts` spells the marker's key
+   again rather than importing it — with `editor-hint.test.ts` asserting the
+   two spellings agree, which is what an import would have bought. */
+
+/** Edit mode, for this tab. */
 const STORE = "sk-edit-mode";
+
+/** This device has been accepted by this site's editor before, so it may be
+    shown a way in. Everything else about it — writing it, expiring it,
+    deleting it, and the one control it draws — is `hint.ts`, which is also
+    where the reasons are. It is not a permission and no handler reads it. */
+const MARK = "sk-edit-here";
 
 /** Call once, from the layout every page shares. */
 export function installInlineEditor(options: InlineOptions = {}): void {
@@ -39,7 +66,20 @@ export function installInlineEditor(options: InlineOptions = {}): void {
       else sessionStorage.removeItem(STORE);
     }
 
-    if (!sessionStorage.getItem(STORE)) return;
+    /* Edit mode is off, which is every visitor on every page. The one extra
+       question asked here is whether *this device* has been accepted by this
+       site's editor before, and it is the cheapest form of it: a marker at
+       all, not a live one. Whether it has expired is decided behind the
+       import, by the chunk only a marked device ever downloads.
+
+       A visitor has no marker, so a visitor's browser reaches `return` having
+       run one `localStorage.getItem` and requested nothing. */
+    if (!sessionStorage.getItem(STORE)) {
+      if (localStorage.getItem(MARK)) {
+        void import("./hint.js").then((module) => module.showEditHint(options));
+      }
+      return;
+    }
 
     const start = (): void => {
       void import("./inline.js").then((module) => module.startInlineEditor(options));

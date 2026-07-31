@@ -28,7 +28,8 @@ import { Dirty } from "./dirty.js";
 import { copyText } from "./dom.js";
 import { clearDraft, draftKey, readDraft, saveDraft, type Draft } from "./drafts.js";
 import { Bar, type SaveState } from "./inline-bar.js";
-import { EDIT_PARAM, panelHref, signInHref, TOUR_PARAM, tourArmed } from "./return-to.js";
+import { noteEditorVerdict } from "./marker.js";
+import { EDIT_MODE, EDIT_PARAM, panelHref, signInHref, TOUR_PARAM, tourArmed } from "./return-to.js";
 import { digitsFor, dirFor, editorStrings, fill, type EditorStrings } from "./strings.js";
 import { Tour, tourStorage, type TourStep } from "./tour.js";
 import { coerce, draftText, findField, plural, valueAt } from "./values.js";
@@ -251,6 +252,12 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     idle(strings.startFailed);
     return;
   }
+
+  /* The first thing the server says about this device, and the last word on
+     whether it keeps its way in. A 200 here refreshes the marker; a 401 or a
+     403 deletes it, which is how revocation reaches a device that still has
+     one. Said once, on both surfaces, in `hint.ts`. */
+  noteEditorVerdict(loaded.status);
 
   if (loaded.status === 401) {
     idle(strings.inlineSignIn);
@@ -671,6 +678,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
       issues?: { path: string; message: string }[];
     };
     saving = false;
+    noteEditorVerdict(response.status);
 
     if (response.ok) {
       /* What was saved is now what the file holds — so typing the old words
@@ -909,7 +917,7 @@ export async function startInlineEditor(options: InlineOptions = {}): Promise<vo
     }
     bar.destroy();
     try {
-      sessionStorage.removeItem("sk-edit-mode");
+      sessionStorage.removeItem(EDIT_MODE);
     } catch {
       /* private browsing — the flag was never stored */
     }

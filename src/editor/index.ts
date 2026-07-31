@@ -27,6 +27,7 @@ import { Dirty } from "./dirty.js";
 import { copyText, cssEscape, el, labelled, link, reveal } from "./dom.js";
 import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
+import { noteEditorVerdict } from "./marker.js";
 import { render, Uploads, type RenderContext } from "./render.js";
 import {
   AUTH_RESULT_PARAM,
@@ -198,6 +199,12 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       status.textContent = strings.startFailed;
       return;
     }
+
+    /* Where an owner's device earns its way in, and it is this line rather
+       than the Google button: signing in is not the event, the server
+       accepting the session that came out of it is. `start()` runs again
+       after sign-in and after sign-out, so both verdicts arrive here. */
+    noteEditorVerdict(session.status);
 
     if (session.status === 401) {
       status.remove();
@@ -816,6 +823,7 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       error?: string;
       issues?: { path: string; message: string }[];
     };
+    noteEditorVerdict(response.status);
 
     if (response.ok) {
       dirty.settle();
