@@ -308,22 +308,61 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     const handoff = paths.includes("handoff") && Boolean(config.authOrigin);
     const direct = paths.includes("google") && Boolean(config.clientId);
 
+    const clientId = config.clientId;
+
     if (handoff) {
       /* The one case where the way in and the work are in conflict: signing in
          again is a navigation, and a navigation loses what they typed. Said
          plainly instead of drawn as a button that silently discards it. */
       if (!navigable) host.append(el("p", "sk-editor__note", strings.signInLapsedAway));
       mountHandoff(host);
-      if (!direct) return;
-      host.append(el("p", "sk-editor__note", strings.signInOr));
+      if (!direct || !clientId) return;
+
+      /* ⚠ **Two buttons both saying "Sign in with Google" is not a choice, it
+         is a puzzle** — and it shipped that way in 0.19.0. The hand-off button
+         was the primary path and rendered as a bare browser button next to
+         Google's polished one, under the word "or", so the arrangement
+         advertised the wrong one twice over.
+
+         Decision 5 already said the hand-off is preferred wherever it exists,
+         because a site cannot know whether its own origin is registered with
+         Google without asking Google — on mosleh's origin the direct button
+         403s in silence to this day. So the direct path stops being an
+         alternative and becomes an escape hatch: one obvious way in, and a
+         disclosure for the day the hand-off is the thing that is broken.
+         Keeping it reachable matters — nobody has yet signed in through the
+         fleet's own sign-in, and removing the proven path to advertise the
+         unproven one would be a poor trade. */
+      const alt = el("details", "sk-editor__alt");
+      const summary = el("summary", "sk-editor__altsummary", strings.signInOther);
+      alt.append(summary);
+      host.append(alt);
+      /* Mounted when it is opened, not before. Google renders into an iframe
+         at a width it is told, and a slot inside a closed <details> measures
+         zero — which is how a button ends up 200px wide in a 400px card. */
+      alt.addEventListener("toggle", () => {
+        if (alt.open && !alt.dataset.mounted) {
+          alt.dataset.mounted = "1";
+          void mountDirect(alt, clientId, onSignedIn);
+        }
+      });
+      return;
     }
 
-    const clientId = config.clientId;
     if (!direct || !clientId) {
       host.append(el("p", "sk-editor__note", strings.signInUnavailable));
       return;
     }
 
+    await mountDirect(host, clientId, onSignedIn);
+  }
+
+  /** Google's own button, in whatever container asked for it. */
+  async function mountDirect(
+    host: HTMLElement,
+    clientId: string,
+    onSignedIn: () => void
+  ): Promise<void> {
     host.append(el("p", "sk-editor__note", strings.signInNote));
     const slot = el("div", "sk-editor__gbutton");
     host.append(slot);

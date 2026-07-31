@@ -58,7 +58,7 @@ export interface EditorStrings {
       sign-in origin is not answering, and only that origin can let them in. */
   signInHandoffDown: string;
   /** Between the hand-off and Google's own button, where a site has both. */
-  signInOr: string;
+  signInOther: string;
   /** The callback's refusal, said on the site the owner came back to. The POST
       path can put this in a response body; a redirect cannot, so the editor
       reads `?sk_auth=denied` and says it here. */
@@ -482,7 +482,7 @@ export const defaultStrings: EditorStrings = {
   signInHandoffDown:
     "Our sign-in page isn't answering at the moment. Nothing is wrong with your site — " +
     "please try again in a few minutes.",
-  signInOr: "or",
+  signInOther: "Trouble? Sign in with Google directly",
   signInDenied: "That account can't edit this site.",
   signInLapsedAway:
     "Signing in again means leaving this page. Copy anything you've typed before you go.",
@@ -739,7 +739,7 @@ const fr: EditorStrings = {
   signInHandoffDown:
     "Notre page de connexion ne répond pas pour le moment. Votre site n’a aucun problème — " +
     "réessayez dans quelques minutes.",
-  signInOr: "ou",
+  signInOther: "Un problème ? Connectez-vous directement avec Google",
   signInDenied: "Ce compte ne peut pas modifier ce site.",
   signInLapsedAway:
     "Se reconnecter veut dire quitter cette page. Copiez ce que vous avez écrit avant de partir.",
@@ -975,7 +975,7 @@ const fa: EditorStrings = {
   signInHandoffNote: "در صفحهٔ ورود ما وارد می‌شوی و بعدش یک‌راست به همین‌جا برمی‌گردی.",
   signInHandoffDown:
     "صفحهٔ ورود ما الان جواب نمی‌دهد. سایت تو هیچ مشکلی ندارد — چند دقیقهٔ دیگر دوباره امتحان کن.",
-  signInOr: "یا",
+  signInOther: "مشکلی هست؟ مستقیم با گوگل وارد شو",
   signInDenied: "این حساب اجازهٔ ویرایش این سایت را ندارد.",
   signInLapsedAway:
     "برای ورود دوباره باید از این صفحه بروی. هرچه نوشته‌ای را اول جایی کپی کن.",

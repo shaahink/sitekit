@@ -718,6 +718,48 @@ body {
 /* Google renders its own button in here, and it expects a light context. */
 .sk-editor__gbutton { margin-block-start: 1rem; color-scheme: light; }
 
+/* The way in.
+   ---------------------------------------------------------------------------
+   ⚠ **This class had no rules at all until 0.21.0**, which is why the fleet's
+   primary sign-in — the whole of session 22's work — painted as a bare browser
+   button, on every site, beside Google's polished one. Nothing failed and no
+   test could have caught it: an unstyled button is a working button. It took
+   somebody opening the page and saying it looked messed up.
+
+   Sized like `__save` because it is the same kind of thing — the one control on
+   the screen — and full width because on a phone that is what makes it read as
+   the thing to press rather than as an afterthought. */
+.sk-editor__signinbutton {
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  inline-size: 100%;
+  max-inline-size: 24rem;
+  min-block-size: 48px;
+  margin-block-start: 0.75rem;
+  padding: 0.7rem 1.5rem;
+  color: var(--sk-editor-bg);
+  background: var(--sk-editor-ink);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.sk-editor__signinbutton:hover:not(:disabled) { background: var(--sk-editor-accent-lit); }
+.sk-editor__signinbutton:disabled { opacity: 0.4; cursor: default; }
+
+/* The escape hatch, and it has to look like one: a quiet line of text, not a
+   second call to action. Two buttons both saying "Sign in with Google" is a
+   puzzle rather than a choice. */
+.sk-editor__alt { margin-block-start: 1.5rem; }
+.sk-editor__altsummary {
+  color: var(--sk-editor-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  /* A 44px row for a thumb, without the summary looking like a button. */
+  padding-block: 0.6rem;
+}
+.sk-editor__altsummary:hover { color: var(--sk-editor-ink); }
+
 @media (prefers-reduced-motion: reduce) {
   .sk-editor * { transition: none !important; }
 }

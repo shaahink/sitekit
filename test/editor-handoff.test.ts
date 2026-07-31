@@ -112,14 +112,34 @@ describe("the hand-off button", () => {
     expect(shown(root)).not.toContain(EN.signInUnavailable);
   });
 
-  it("leads, with Google's button kept as the fallback beneath it", async () => {
+  it("is the only button, with Google's kept behind a disclosure", async () => {
     stub(BOTH);
     const root = await signInScreen();
     const text = shown(root);
     /* Decision 5: prefer the hand-off wherever it exists, because a site
        cannot know whether its own origin is registered without asking Google. */
-    expect(text.indexOf(EN.signInHandoffNote)).toBeLessThan(text.indexOf(EN.signInNote));
-    expect(text).toContain(EN.signInOr);
+    expect(text).toContain(EN.signInHandoffNote);
+    expect(text).toContain(EN.signInOther);
+
+    /* ⚠ The property this test exists for, and the one 0.19.0 shipped without:
+       **exactly one button on the screen says "Sign in with Google"**. Two of
+       them, under the word "or", is a puzzle rather than a choice — and the
+       unstyled one was the primary path. */
+    const buttons = [...root.querySelectorAll("button")].filter(
+      (node) => (node.textContent ?? "").trim() === EN.signInHandoff
+    );
+    expect(buttons).toHaveLength(1);
+
+    /* And Google's note is not on the screen until the disclosure is opened,
+       because Google's button is not either — its iframe measures zero inside
+       a closed <details>. */
+    expect(text).not.toContain(EN.signInNote);
+    const alt = root.querySelector("details");
+    expect(alt).toBeTruthy();
+    alt!.open = true;
+    alt!.dispatchEvent(new Event("toggle"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(shown(root)).toContain(EN.signInNote);
   });
 
   it("goes to the site's own route and asks nothing of the sign-in origin", async () => {
