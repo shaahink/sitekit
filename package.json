@@ -1,7 +1,7 @@
 {
   "name": "@shaahink/sitekit",
-  "version": "0.17.0",
-  "description": "Shared logic for the sk site fleet: feedback intake, screenshot proxy, widget internals, credits, the dual header emitter, site URLs and sitemaps from one source, the analytics tag and its stats reader, and the owner's editor.",
+  "version": "0.18.0",
+  "description": "Shared logic for the sk site fleet: feedback intake, screenshot proxy, widget internals, credits, the dual header emitter, site URLs and sitemaps from one source, the analytics tag and its stats reader, the owner's editor, and the motion plumbing (deferred boot contract + figure rig).",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -83,6 +83,14 @@
     },
     "./editor/editor.css": "./dist/editor/editor.css",
     "./editor/inline.css": "./dist/editor/inline.css",
+    "./motion": {
+      "types": "./dist/motion/index.d.ts",
+      "default": "./dist/motion/index.js"
+    },
+    "./motion/rig": {
+      "types": "./dist/motion/rig.d.ts",
+      "default": "./dist/motion/rig.js"
+    },
     "./astro": {
       "types": "./dist/astro/index.d.ts",
       "default": "./dist/astro/index.js"

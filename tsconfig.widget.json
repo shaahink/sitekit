@@ -8,5 +8,5 @@
     "lib": ["ES2017", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["src/widget"]
+  "include": ["src/widget", "src/motion"]
 }
