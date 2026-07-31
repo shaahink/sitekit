@@ -381,4 +381,41 @@ describe("the server and the panel agree", () => {
     expect(remote.hits[0]?.snippet).toEqual(local.hits[0]?.snippet);
     expect(remote.hits[0]?.where).toEqual(local.hits[0]?.where);
   });
+
+  /* And the same over the Persian folds, because the site they were built for
+     is the one whose panel almost never has the right page open: 21 pages and
+     ten articles means the row an owner taps is nearly always an *elsewhere*
+     row, served by the handler. A fold that reached only the panel would look
+     perfect on the page in front of them and find nothing anywhere else. */
+  it("folds a Persian query the same way on both sides", async () => {
+    const zwnj = String.fromCharCode(0x200c);
+    const joined = "سلول" + zwnj + "های";
+    const schema = z.object({
+      title: z.string().meta({ title: "عنوان" }),
+      body: z.string().meta({ title: "متن" })
+    });
+    const article = normalize(`title: "جراحی ماستوئید"\nbody: "عفونت در ${joined} ماستوئید"\n`);
+
+    vi.stubGlobal("fetch", async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path.includes("/commits")) return json([{ sha: head }]);
+      return json({ type: "file", content: utf8Base64(article), sha: "f" });
+    });
+
+    /* The space spelling, which only the forgiving pass can answer. */
+    const query = "سلول های";
+    const local = searchEntry(formModel(schema), readValues(article), query);
+    const remote = await searchSite(
+      access,
+      { articles: { schema, file: "src/content/articles/mastoid.yaml", label: "مقاله" } },
+      query
+    );
+
+    expect(local.total).toBe(1);
+    expect(remote.total).toBe(local.total);
+    expect(remote.hits[0]?.snippet).toEqual(local.hits[0]?.snippet);
+    /* The ZWNJ is still in what the owner is shown — the fold was for the
+       comparison, and the snippet is a slice of the file. */
+    expect(remote.hits[0]?.snippet?.match).toBe(joined);
+  });
 });

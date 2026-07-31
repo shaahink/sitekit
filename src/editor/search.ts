@@ -66,7 +66,7 @@ import { plural } from "./values.js";
    New server-side callers import `match.js` directly, because importing *this*
    file drags the string table in behind it. That is the whole reason for the
    split; see match.ts's header. */
-export type { Candidate, Folded, SearchHit, SearchOptions, Snippet, Span } from "./match.js";
+export type { Candidate, Folded, Needle, SearchHit, SearchOptions, Snippet, Span } from "./match.js";
 export { entryFields, findIn, fold, foldQuery, searchEntry } from "./match.js";
 export type { SiteHit, SiteSearch } from "../cms/search.js";
 

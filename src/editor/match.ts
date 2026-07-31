@@ -78,29 +78,141 @@ export interface Folded {
   end: number[];
 }
 
+/** A query, folded once for the whole pass, and — when it is Persian — folded
+    a second, more forgiving way as well.
+    -------------------------------------------------------------------------
+    The second fold exists because of a measurement, not a hunch. mosleh's 24
+    content files hold **903 zero-width non-joiners**, and the word an owner
+    types is very often the same word written with a plain space, or with
+    nothing at all: three spellings of one word, all of which they can see on
+    their own page. Deleting the ZWNJ (which is what the primary fold does, and
+    what Chrome's own matcher does) closes two of the three, and leaves the one
+    the round wrote down as its example — a plural stored as `گرومت ها` where
+    it wanted `گرومت‌ها`, which mosleh really does contain.
+
+    So `loose` folds the separator away on **both** sides, and `findIn` tries
+    it only after the honest comparison has failed. That ordering is what keeps
+    it safe: an exact match always wins, and the forgiving pass only ever turns
+    *nothing found* into *found* — never a nearer match into a further one. It
+    is attached only when the query contains a Persian or Arabic letter, so no
+    English or French search behaves differently by a single character, and it
+    is attached even when it folds to the same text as the primary, because the
+    spelling that needs forgiving may be the one in the **file**. */
+export interface Needle extends Folded {
+  loose?: Folded;
+}
+
+/** Characters an owner cannot see, which must therefore never decide a match.
+    -------------------------------------------------------------------------
+    The zero-width family first, because a ZWNJ is the whole reason this list
+    exists: it is invisible, it is 903 characters of mosleh's content, and a
+    Persian keyboard gives it to one person and a plain space to the next. Its
+    relatives ride along — a ZWJ, a bidi mark or a BOM comes free with a paste
+    out of a PDF or a browser, and an invisible character that silently
+    prevents a match is the worst kind of nothing.
+
+    Then the tatweel, which only stretches a join, and the combining marks —
+    which is where **tanween** lives. `معمولا` for `معمولاً` was named in the
+    round as the imperfection that breaks naive matching, and the census found
+    it: three tanween in 94,878 code points, so the corpus is *inconsistent*
+    rather than uniformly bare, which is the case that hurts. The rest of the
+    harakat (fatha, kasra, damma, sukun, shadda, the combining madda and hamza)
+    fold by exactly the same argument — an owner does not type what they cannot
+    see, and one file having them while nine do not is what stops a search. */
+function isInvisible(code: number): boolean {
+  if (code >= 0x200b && code <= 0x200f) return true; // ZWSP, ZWNJ, ZWJ, LRM, RLM
+  if (code === 0x061c || code === 0xfeff) return true; // Arabic letter mark, BOM
+  if (code === 0x0640) return true; // tatweel, which only stretches a join
+  return isCombiningMark(code);
+}
+
+/** A mark that sits *on* the letter before it rather than beside it: the
+    harakat, tanween first, and the superscript alef.
+    -------------------------------------------------------------------------
+    It has a name of its own because the span needs it as well as the fold. A
+    mark folds away, so a match ends one code point short of the grapheme an
+    owner is looking at — measured on mosleh's own `کاملاً`, where searching
+    `کاملا` quoted `کاملا` back and left her tanween outside the highlight,
+    orphaned at the head of the text that follows it. `locate` walks the span
+    over them for that reason. */
+function isCombiningMark(code: number): boolean {
+  return (code >= 0x064b && code <= 0x0655) || code === 0x0670;
+}
+
+/** One letter, written more than one way.
+    -------------------------------------------------------------------------
+    The census says the corpus is clean here — 0 Arabic yeh among 5,394, 0
+    Arabic kaf among 1,765 — so this half is about the **query**: an Arabic
+    keyboard layout, an iOS suggestion or a paste out of an Arabic-language
+    source gives `ي` and `ك`, and A3.1 measured that Chrome's own matcher folds
+    neither. The alef and heh forms are not on the round's list and are here
+    because the census argued for them: 270 of `آ أ إ` in the corpus, against
+    an owner who types a bare `ا` because that is what they hear. `ئ` is
+    deliberately absent — it is a letter of its own in Persian (`مسئول`), not a
+    spelling of `ی`. */
+const SAME_LETTER = new Map<number, number>([
+  [0x064a, 0x06cc], // arabic yeh      -> persian yeh
+  [0x0649, 0x06cc], // alef maksura    -> persian yeh
+  [0x0643, 0x06a9], // arabic kaf      -> persian kaf
+  [0x0622, 0x0627], // alef with madda -> alef
+  [0x0623, 0x0627], // alef, hamza above -> alef
+  [0x0625, 0x0627], // alef, hamza below -> alef
+  [0x0671, 0x0627], // alef wasla      -> alef
+  [0x0629, 0x0647], // teh marbuta     -> heh
+  [0x06c0, 0x0647] //  heh, yeh above  -> heh
+]);
+
+/** Persian and Arabic-Indic digits as the Latin digit they are. The corpus
+    holds both — 146 Persian and 204 Latin across the same 24 files — so a year
+    or a phone number an owner reads in one script is one they may well type in
+    the other. Folding runs one way only, and only on the comparison path: the
+    stored `۱۴۰۱` stays `۱۴۰۱`, which the fleet already learned the hard way
+    about normalisation. */
+function foldDigit(code: number): string | null {
+  if (code >= 0x06f0 && code <= 0x06f9) return String(code - 0x06f0);
+  if (code >= 0x0660 && code <= 0x0669) return String(code - 0x0660);
+  return null;
+}
+
 /** What one code point folds to, for the purpose of comparison only.
-
-    Deliberately thin at this stage: case, and any run of whitespace as a
-    single space so that a phrase still matches across the line breaks a YAML
-    block scalar puts in. **A3.3 extends exactly this function** — ZWNJ,
-    tanween, Arabic-versus-Persian ye and kaf, Persian versus Latin digits —
-    and the machinery it needs is the deletion case, which is already here and
-    already tested. (It moved from `search.ts` to this file in A3.2; it is
-    still the one function to extend, and now extending it fixes the server's
-    search and the panel's in the same edit, which is the argument for the
-    move.)
-
-    Three of those four the browser's own matcher turns out to do already
-    (measured: `معمولا` finds `معمولاً`, `کتابها` finds `کتاب‌ها`, `123` finds
-    `۱۲۳`); the kaf it does not. None of that helps here, because this file is
-    its own matcher — it is recorded because it says what an owner expects. */
+    -------------------------------------------------------------------------
+    Case, and any run of whitespace as a single space so that a phrase still
+    matches across the line breaks a YAML block scalar puts in; then the
+    Persian folds above. Nothing here is on a write path — `fold` builds a new
+    string and the caller reads its answer back out of the original, which
+    `test/editor-search.test.ts` proves in bytes. */
 function foldChar(ch: string): string {
   if (/\s/.test(ch)) return " ";
+  const code = ch.codePointAt(0) ?? 0;
+  if (isInvisible(code)) return "";
+  const same = SAME_LETTER.get(code);
+  if (same !== undefined) return String.fromCodePoint(same);
+  const digit = foldDigit(code);
+  if (digit !== null) return digit;
   return ch.toLowerCase();
 }
 
-export function fold(source: string): Folded {
-  let text = "";
+/** A letter of the Persian/Arabic script, as opposed to a digit or a mark of
+    punctuation that shares its block. Asked of *folded* text, where the digits
+    have already become Latin ones — but it answers honestly on its own, since
+    a predicate that is only correct in one caller is a bug waiting for a
+    second. */
+function isPersianLetter(ch: string | undefined): boolean {
+  if (!ch) return false;
+  const code = ch.codePointAt(0) ?? 0;
+  if (code < 0x0620 || code > 0x06ff) return false;
+  if (code >= 0x0660 && code <= 0x0669) return false; // ٠-٩
+  if (code >= 0x06f0 && code <= 0x06f9) return false; // ۰-۹
+  // The comma, semicolon, question mark and full stop share the block and
+  // are not letters, so a space beside one is a space an owner typed.
+  return code !== 0x060c && code !== 0x061b && code !== 0x061f && code !== 0x06d4;
+}
+
+/** Fold `source` for comparison. `loose` additionally drops a space that sits
+    between two Persian letters — see `Needle`, and note that it is only ever
+    reached after the honest comparison has already failed. */
+export function fold(source: string, loose = false): Folded {
+  const chars: string[] = [];
   const start: number[] = [];
   const end: number[] = [];
   let at = 0;
@@ -111,35 +223,68 @@ export function fold(source: string): Folded {
     at += ch.length;
     const mapped = foldChar(ch);
     /* A collapsed run of whitespace emits one space and then nothing, which is
-       the deletion case the map exists for. */
-    if (mapped === " " && text.endsWith(" ")) continue;
+       the deletion case the map exists for — and which every fold added since
+       leans on, because most of them delete outright. */
+    if (mapped === " " && chars[chars.length - 1] === " ") continue;
+    /* By code *unit* on the way out, because these are indices into the folded
+       string and `indexOf` answers in code units. */
     for (let i = 0; i < mapped.length; i++) {
+      chars.push(mapped[i] as string);
       start.push(from);
       end.push(at);
     }
-    text += mapped;
   }
-  return { text, start, end };
+  if (loose) dropWordSpaces(chars, start, end);
+  return { text: chars.join(""), start, end };
+}
+
+/** Remove each space between two Persian letters, keeping the map beside it in
+    step. Backwards, so a removal cannot move the cursor onto a character it
+    has already passed. */
+function dropWordSpaces(chars: string[], start: number[], end: number[]): void {
+  for (let i = chars.length - 1; i > 0; i--) {
+    if (chars[i] !== " ") continue;
+    if (!isPersianLetter(chars[i - 1]) || !isPersianLetter(chars[i + 1])) continue;
+    chars.splice(i, 1);
+    start.splice(i, 1);
+    end.splice(i, 1);
+  }
 }
 
 /** Where `query` sits inside `source`, in `source`'s own offsets, or null.
     Both sides are folded, so the comparison is on the folded text and the
-    answer is on the real one. */
-export function findIn(source: string, query: Folded): Span | null {
+    answer is on the real one — and when a Persian query finds nothing, both
+    sides are folded again with the word separators dropped. The second pass
+    costs a second walk of a string that has already failed, and it costs
+    nothing at all for a query with no Persian in it. */
+export function findIn(source: string, query: Needle): Span | null {
   if (!query.text) return null;
-  const haystack = fold(source);
-  const at = haystack.text.indexOf(query.text);
+  const direct = locate(fold(source), query.text, source);
+  if (direct || !query.loose?.text) return direct;
+  return locate(fold(source, true), query.loose.text, source);
+}
+
+function locate(haystack: Folded, needle: string, source: string): Span | null {
+  const at = haystack.text.indexOf(needle);
   if (at === -1) return null;
-  const last = at + query.text.length - 1;
-  return { from: haystack.start[at] ?? 0, to: haystack.end[last] ?? source.length };
+  const last = at + needle.length - 1;
+  let to = haystack.end[last] ?? source.length;
+  /* Take the marks the last matched letter carries. They folded away, so the
+     span stops at the letter — and a highlight that splits a letter from its
+     own tanween renders as a stray mark at the start of the words after it. */
+  while (to < source.length && isCombiningMark(source.charCodeAt(to))) to += 1;
+  return { from: haystack.start[at] ?? 0, to };
 }
 
 /** The query, folded once for the whole pass. Trimmed at the source rather
     than after folding, so the map stays aligned with the text it describes —
     and a query that is spaces alone folds to nothing and matches nothing,
     rather than matching every field on the page. */
-export function foldQuery(query: string): Folded {
-  return fold(query.trim());
+export function foldQuery(query: string): Needle {
+  const trimmed = query.trim();
+  const primary = fold(trimmed);
+  if (![...primary.text].some((ch) => isPersianLetter(ch))) return primary;
+  return { ...primary, loose: fold(trimmed, true) };
 }
 
 /* --- what there is to search --------------------------------------------- */

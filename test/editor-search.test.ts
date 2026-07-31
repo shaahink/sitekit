@@ -181,6 +181,140 @@ describe("folding for comparison", () => {
   });
 });
 
+/* --- and the folds that are the reason this stage exists ------------------ */
+
+describe("folding Persian, for the comparison and nothing else", () => {
+  /* Built from code points rather than typed. A ZWNJ and a tanween are
+     invisible in a source file, and an Arabic yeh is a pixel away from a
+     Persian one — a fixture nobody can read is a test that can pass with both
+     sides wrong in the same way. */
+  const ZWNJ = String.fromCharCode(0x200c);
+  const TANWEEN = String.fromCharCode(0x064b);
+  const PERSIAN_YEH = String.fromCharCode(0x06cc);
+  const PERSIAN_KAF = String.fromCharCode(0x06a9);
+  const YEAR = String.fromCharCode(0x06f1, 0x06f4, 0x06f0, 0x06f1); // ۱۴۰۱
+
+  /** The same word as an Arabic keyboard, an iOS suggestion or a paste out of
+      an Arabic-language PDF gives it. */
+  const arabicKeyboard = (word: string): string =>
+    word
+      .split(PERSIAN_YEH)
+      .join(String.fromCharCode(0x064a))
+      .split(PERSIAN_KAF)
+      .join(String.fromCharCode(0x0643));
+
+  /* mosleh's own spelling, and there are 903 of these in her 24 files. */
+  const cells = "سلول" + ZWNJ + "های";
+  const sentence = "عفونت در " + cells + " ماستوئید";
+
+  it("finds a word joined by a ZWNJ when nothing was typed in its place", () => {
+    const span = findIn(sentence, foldQuery("سلولهای"));
+    expect(span).not.toBeNull();
+    expect(sentence.slice(span!.from, span!.to)).toBe(cells);
+  });
+
+  it("finds it when a plain space was typed instead", () => {
+    const span = findIn(sentence, foldQuery("سلول های"));
+    expect(span).not.toBeNull();
+    expect(sentence.slice(span!.from, span!.to)).toBe(cells);
+  });
+
+  /* The other direction, and it is the one the round wrote down: mosleh really
+     does store `گرومت ها` where the ZWNJ was meant. An owner who spells their
+     own word correctly must still find their own page. */
+  it("finds a plural the file stored with a space, spelled correctly", () => {
+    const stored = "قرار دادن گرومت ها انجام دهد";
+    const span = findIn(stored, foldQuery("گرومت" + ZWNJ + "ها"));
+    expect(span).not.toBeNull();
+    expect(stored.slice(span!.from, span!.to)).toBe("گرومت ها");
+  });
+
+  /* mosleh's corpus holds both spellings of this: `معمولا` bare 49 times, and
+     `کاملاً` marked 3 times in 94,878 code points. The direction that was
+     broken is the one where the *file* is bare and the owner types the mark. */
+  it("finds a word whose tanween the file kept, and one whose it dropped", () => {
+    const kept = "معمولا" + TANWEEN + " بدون درد است";
+    expect(findIn(kept, foldQuery("معمولا"))).not.toBeNull();
+
+    const dropped = "معمولا بدون درد است";
+    const span = findIn(dropped, foldQuery("معمولا" + TANWEEN));
+    expect(span).not.toBeNull();
+    expect(dropped.slice(span!.from, span!.to)).toBe("معمولا");
+  });
+
+  /* Found on mosleh's real content rather than reasoned about: searching
+     `کاملا` quoted `کاملا` back and left her tanween orphaned at the head of
+     the words after the highlight. */
+  it("takes the marks the last matched letter carries", () => {
+    const stored = "درمان" + " کاملا" + TANWEEN + " فردی";
+    const span = findIn(stored, foldQuery("کاملا"));
+    expect(span).not.toBeNull();
+    expect(stored.slice(span!.from, span!.to)).toBe("کاملا" + TANWEEN);
+
+    const { hits } = searchEntry([text("hero.title", "عنوان")], { hero: { title: stored } }, "کاملا");
+    expect(hits[0]?.snippet?.match).toBe("کاملا" + TANWEEN);
+    expect(hits[0]?.snippet?.after?.startsWith(TANWEEN)).toBe(false);
+  });
+
+  /* The one Chrome's own matcher does not do, measured in A3.1. */
+  it("finds Persian letters typed on an Arabic keyboard", () => {
+    const stored = "کلینیک زیبایی";
+    expect(stored).toContain(PERSIAN_KAF);
+    expect(stored).toContain(PERSIAN_YEH);
+
+    const typed = arabicKeyboard(stored);
+    expect(typed).not.toBe(stored);
+
+    const span = findIn(stored, foldQuery(typed));
+    expect(span).not.toBeNull();
+    expect(stored.slice(span!.from, span!.to)).toBe(stored);
+  });
+
+  it("finds a number written in the other script, both ways round", () => {
+    const stored = "از سال " + YEAR;
+    const span = findIn(stored, foldQuery("1401"));
+    expect(span).not.toBeNull();
+    expect(stored.slice(span!.from, span!.to)).toBe(YEAR);
+    expect(findIn("since 1401", foldQuery(YEAR))).not.toBeNull();
+  });
+
+  /* The map, on the forgiving path. A dropped separator moves every offset
+     after it exactly as a collapsed run of whitespace does, and the symptom is
+     a snippet quoting the wrong half of a Persian sentence — which reads as a
+     bidi rendering quirk rather than as a bug. */
+  it("quotes the owner's own words back, with the joiner still in them", () => {
+    const values = { hero: { title: sentence } };
+    const { hits } = searchEntry([text("hero.title", "عنوان")], values, "سلول های");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.snippet?.match).toBe(cells);
+    expect(hits[0]?.snippet?.before).toBe("عفونت در ");
+  });
+
+  /* Two negative controls, because the forgiving pass is the one thing here
+     that could make search *worse*. */
+  it("never loosens a query with no Persian in it", () => {
+    /* If it ever ran on Latin text, "the cat" would find "breathe catalogue".
+       The pass hangs off the needle, so this asserts the needle itself. */
+    expect(foldQuery("slow clothes").loose).toBeUndefined();
+    expect(findIn("Slow clothes", foldQuery("slowclothes"))).toBeNull();
+  });
+
+  it("prefers the spelling the owner actually typed", () => {
+    /* Both spellings on one line: the exact one wins, because the forgiving
+       pass runs only when the honest comparison has found nothing at all. */
+    const both = "کتاب ها و کتاب" + ZWNJ + "ها";
+    const span = findIn(both, foldQuery("کتاب" + ZWNJ + "ها"));
+    expect(both.slice(span!.from, span!.to)).toBe("کتاب" + ZWNJ + "ها");
+  });
+
+  it("drops the space between two letters and keeps every other one", () => {
+    /* A word separator, not every space: the one before a number is a space an
+       owner typed and may well be searching for. */
+    expect(fold("درد " + YEAR, true).text).toBe("درد 1401");
+    expect(fold("سلول های", true).text).toBe("سلولهای");
+  });
+});
+
 /* --- the search itself ---------------------------------------------------- */
 
 describe("searching the loaded entry", () => {
@@ -645,15 +779,30 @@ describe("what a search does to the content", () => {
      folded string as an edit, and the first anyone knows is a commit. So the
      comparison is on a copy and the document is compared in bytes afterwards. */
   it("leaves the stored bytes exactly as they were", () => {
-    const persian = {
-      hero: { title: "کتاب‌های معمولاً ۱۲۳", tagline: "  spaced   out  " }
-    };
+    /* One of everything A3.3 folds, so that a fold which normalised in place
+       would have something of each kind to destroy: a zero-width non-joiner, a
+       tanween, an alef with madda, and Persian digits. */
+    const zwnj = String.fromCharCode(0x200c);
+    const tanween = String.fromCharCode(0x064b);
+    const title = "کتاب" + zwnj + "های معمولا" + tanween + " آ" + String.fromCharCode(0x06f1, 0x06f2, 0x06f3);
+    const persian = { hero: { title, tagline: "  spaced   out  " } };
     const before = Buffer.from(JSON.stringify(persian), "utf8");
 
+    /* Every path that touches the value: an exact query, one that only the
+       forgiving pass can answer, an Arabic-keyboard spelling, the Latin
+       digits, and the walk on its own. */
     searchEntry(
       [text("hero.title", "Title"), text("hero.tagline", "Tagline")],
       persian,
-      "معمولاً"
+      "معمولا" + tanween
+    );
+    searchEntry([text("hero.title", "Title")], persian, "کتاب های");
+    searchEntry([text("hero.title", "Title")], persian, "معمولا");
+    searchEntry([text("hero.title", "Title")], persian, "123");
+    searchEntry(
+      [text("hero.title", "Title")],
+      persian,
+      "کتاب".split(String.fromCharCode(0x06a9)).join(String.fromCharCode(0x0643))
     );
     searchEntry([text("hero.title", "Title")], persian, "spaced out");
     entryFields([text("hero.title", "Title")], persian);
@@ -661,7 +810,14 @@ describe("what a search does to the content", () => {
     const after = Buffer.from(JSON.stringify(persian), "utf8");
     expect(after.equals(before)).toBe(true);
     /* Named individually as well, because a deep-equal that both sides fold
-       identically would pass while both were wrong. */
-    expect(persian.hero.title).toBe("کتاب‌های معمولاً ۱۲۳");
+       identically would pass while both were wrong. Code point by code point,
+       because every character this stage added is one nobody can see. */
+    expect(persian.hero.title).toBe(title);
+    expect([...persian.hero.title].map((ch) => ch.codePointAt(0))).toEqual([
+      ...title
+    ].map((ch) => ch.codePointAt(0)));
+    expect(persian.hero.title).toContain(zwnj);
+    expect(persian.hero.title).toContain(tanween);
+    expect(persian.hero.title).toContain(String.fromCharCode(0x06f1));
   });
 });
