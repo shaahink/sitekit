@@ -124,6 +124,10 @@ export function home(options: HomeOptions): {
       always followed. Called again whenever the picker changes, because the
       answer is about the entry rather than about the owner. */
   setShowMe: (href: string | null) => void;
+  /** Re-open the first-run walkthrough. */
+  openHelp: () => void;
+  /** Open the "ask for a change" form and scroll to it. */
+  openAsk: () => void;
 } {
   const { strings } = options;
   const store = safeStorage(options.storage);
@@ -147,12 +151,23 @@ export function home(options: HomeOptions): {
      with the data. Unknown stays false. */
   let linkable = false;
 
+  const ask = requestButton(strings, options.onRequest, () => linkable);
   element.append(welcome.element, help, blocks, actions);
-  actions.append(requestButton(strings, options.onRequest, () => linkable));
+  actions.append(ask.element);
 
   return {
     element,
     setShowMe: welcome.setShowMe,
+    /* Both of these exist so the account sheet can reach the two things an
+       owner looks for in a settings screen without either being built twice.
+       The sheet closes itself and hands over; the controls stay exactly where
+       they have always been, which is what keeps "Show me around again" from
+       becoming a second tour with its own bugs. */
+    openHelp: () => help.click(),
+    openAsk: () => {
+      ask.element.scrollIntoView?.({ block: "center", behavior: "smooth" });
+      ask.open();
+    },
     setData: (data) => {
       linkable = data.linkable === true;
       blocks.textContent = "";
@@ -496,7 +511,7 @@ function requestButton(
   strings: EditorStrings,
   onRequest: (text: string) => Promise<string>,
   linkable: () => boolean
-): HTMLElement {
+): { element: HTMLElement; open: () => void } {
   const wrap = el("span", "sk-editor__request");
   const open = el("button", "sk-editor__link", strings.homeRequestOpen);
   open.type = "button";
@@ -562,7 +577,12 @@ function requestButton(
     });
   });
 
-  return wrap;
+  /* `open.click()` rather than a shared `expand()` the listener also calls: the
+     listener's first line is a guard against opening a form that is already
+     open, and routing both callers through the same click keeps that guard in
+     one place. Clicking a button that is already hidden is a no-op, which is
+     the correct behaviour for "ask for a change" pressed twice. */
+  return { element: wrap, open: () => open.click() };
 }
 
 /* --- small things ------------------------------------------------------- */

@@ -22,7 +22,9 @@
    template work and reaches the fields that have no visible DOM at all —
    meta.ogDescription, image alt text, the aria strings. */
 
+import { createLadder, createPwa, type Ladder, type Pwa } from "../app/index.js";
 import type { Field } from "../cms/fields.js";
+import { account, reportPasskey, type Say } from "./account.js";
 import { Dirty } from "./dirty.js";
 import { copyText, cssEscape, el, labelled, link, reveal } from "./dom.js";
 import { loadGis } from "./gis.js";
@@ -46,6 +48,7 @@ import {
   fill,
   LANG_PARAM,
   LANG_STORE,
+  PANEL_LANGUAGES,
   resolveEditorLang,
   type EditorStrings
 } from "./strings.js";
@@ -67,6 +70,20 @@ export interface EditorOptions {
   /** Google Identity Services' script URL. Overridable for tests; there is no
       reason a site would set it. */
   gisSrc?: string;
+  /** What the route knows about this site as an installable app. Handed over
+      by `edit.astro` from the integration's own config, so nothing here is a
+      site's decision to get wrong — a site that passed `app: false` arrives
+      with a null worker and gets no install or unlock offers at all. */
+  app?: {
+    /** This release, for the account sheet's footer. */
+    version: string;
+    /** The service worker to register, or null where there is none. */
+    worker: string | null;
+  };
+  /** Where the passkey handler answers. Default `/api/passkey`. A site that
+      has not mounted one gets refusals with words rather than dead buttons,
+      which is the whole design — see account.ts. */
+  passkeyPath?: string;
 }
 
 interface EntryRef {
@@ -135,6 +152,41 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
   const auth = options.authPath ?? "/api/auth";
   const content = options.contentPath ?? "/api/content";
   const gisSrc = options.gisSrc;
+
+  /* The app half, 0.23.0. The ladder is built unconditionally because it is
+     inert until asked and answers "unsupported" for a site with no handler —
+     see unlock.ts, where that conflation is deliberate and explained. The PWA
+     is built only where the route handed over a worker, because registering
+     one that is not there is a console error on every load of every site that
+     opted out. */
+  const ladder: Ladder = createLadder({ endpoint: options.passkeyPath ?? "/api/passkey" });
+  const worker = options.app?.worker ?? null;
+  const pwa: Pwa | null = worker ? createPwa({ worker }) : null;
+  const version = options.app?.version ?? "";
+
+  /* Registering the worker and listening for the install offer, once. The
+     callback repaints nothing by itself — the sheet asks `canInstall()` fresh
+     every time it paints — so this exists to catch the case where the offer
+     arrives while the sheet is already open. */
+  pwa?.start(() => sheet?.refresh());
+
+  /** Changing the panel's language. A reload rather than a re-render, and that
+      is not laziness: `lang` and `dir` are on the document element, the three
+      string tables are chosen once at mount, and every control on screen was
+      built from the old table. Re-rendering the panel in place would mean
+      rebuilding all of it and losing whatever is half-typed; a reload is
+      honest about that and takes the same second. The `?lang=` goes on the URL
+      so the choice survives the reload, and `panelLang()` writes it back to
+      storage on the way in. */
+  function switchLang(next: string): void {
+    const url = new URL(location.href);
+    url.searchParams.set(LANG_PARAM, next);
+    location.assign(url.toString());
+  }
+
+  /* Assigned by `chrome()`. Held here because `pwa.start`'s callback is
+     registered before the panel exists and may fire at any time after. */
+  let sheet: { refresh: () => void } | null = null;
 
   /* The document is told what it turned out to be. `lang` because a screen
      reader and the browser's own text handling read the attribute rather than
@@ -262,8 +314,71 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       card.append(el("p", "sk-editor__error", strings.signInFailed));
     }
 
+    /* The device's own way in, above the ways in that need a network and
+       another company. Filled in asynchronously — the question takes a
+       capability check and a round trip, and making the whole sign-in screen
+       wait on it would trade a fast screen for a row most readers do not have.
+       Placed before the Google button rather than after so that
+       `deviceNeedsSession`'s "sign in once below" is true. */
+    const deviceHost = el("div", "sk-editor__device");
+    card.append(deviceHost);
+
     element.append(card);
     await mountGoogleButton(card, () => void start());
+    await offerDevice(deviceHost);
+  }
+
+  /** What this device can offer on the signed-out screen: a way in, a sentence
+      explaining how to earn one, or nothing at all.
+
+      This is the screen the bug report was about. Before 0.23.0 the console's
+      version of it had two outcomes — a button or an empty space — for a
+      question with three answers here, and the button could fail without a
+      word. Both halves are fixed: `needs-session` is a sentence rather than a
+      hidden control, and every refusal below arrives through `reportPasskey`,
+      which has words for all of them. */
+  async function offerDevice(host: HTMLElement): Promise<void> {
+    const rung = await ladder.refresh(false);
+    /* `can-enrol` is unreachable signed out — `refresh(false)` cannot return
+       it — and `unsupported` covers both a device with no sensor and a site
+       with no handler, which read to a person as the same nothing. */
+    if (rung === "unsupported") return;
+
+    if (rung === "needs-session") {
+      host.append(el("p", "sk-editor__note", strings.deviceNeedsSession));
+      return;
+    }
+
+    const say: Say = (text, kind) => {
+      let line = host.querySelector<HTMLElement>(".sk-editor__devicemessage");
+      if (!line) {
+        line = el("p", "sk-editor__note sk-editor__devicemessage");
+        line.setAttribute("role", "status");
+        line.setAttribute("aria-live", "polite");
+        host.append(line);
+      }
+      line.textContent = text;
+      line.classList.toggle("sk-editor__error", kind === "bad");
+    };
+
+    const go = el("button", "sk-editor__signinbutton", strings.deviceUnlock);
+    go.type = "button";
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      void ladder.unlock().then((result) => {
+        go.disabled = false;
+        if (reportPasskey(result, strings, say)) void start();
+      });
+    });
+    host.append(go);
+
+    /* And try it without being asked. Somebody who set this up wants the
+       prompt, not a button that summons one — but the button stays, because a
+       prompt can be dismissed and a second attempt has to be possible.
+       A null result means there was nothing to try, which is not a failure and
+       must not be reported as one. */
+    const auto = await ladder.autoUnlock();
+    if (auto && reportPasskey(auto, strings, say)) void start();
   }
 
   /** Every way in this site has, in whatever container asked for it, calling
@@ -465,9 +580,7 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     const bar = el("div", "sk-editor__bar");
     if (session.who) bar.append(el("span", "sk-editor__who", session.who));
 
-    const out = el("button", "sk-editor__link", strings.signOut);
-    out.type = "button";
-    out.addEventListener("click", () => {
+    const signOut = (): void => {
       /* `start()` either way: a DELETE that never left the browser has not
          signed anybody out, and re-reading the session is how the panel finds
          out which of those happened. Unhandled, this was the fourth rejection
@@ -475,8 +588,30 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       void fetch(auth, { method: "DELETE" })
         .catch(() => {})
         .then(() => start());
+    };
+
+    /* One control where "Sign out" used to be, rather than one more beside it.
+       Session 17 measured this bar taking a quarter of a phone screen and cut
+       it down; the way to give an owner six new things without undoing that is
+       to give them a door, not six buttons. Sign out lives inside, at the
+       bottom, which is also where it stops being the easiest thing to hit by
+       accident on a small screen. */
+    const settings = account({
+      strings,
+      lang,
+      who: session.who,
+      version,
+      ladder,
+      pwa,
+      languages: PANEL_LANGUAGES,
+      onSignOut: signOut,
+      onLanguage: switchLang,
+      onHelp: () => owner.openHelp(),
+      onAsk: () => owner.openAsk(),
+      onSessionChange: () => void start()
     });
-    bar.append(out);
+    bar.append(settings.button);
+    sheet = settings;
 
     const picker = el("div", "sk-editor__picker");
     const select = el("select", "sk-editor__input sk-editor__select");
@@ -641,7 +776,9 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
         select.dispatchEvent(new Event("change"));
       }
     });
-    element.append(bar, owner.element, picker, finder.element, form, footer);
+    /* The sheet last, so it paints over everything without needing a stacking
+       context of its own invented for it. */
+    element.append(bar, owner.element, picker, finder.element, form, footer, settings.element);
 
     /* Not awaited, and its failure is swallowed on purpose. 7.7: "a slow or
        dead Umami cannot delay the form rendering — load it after, and let it

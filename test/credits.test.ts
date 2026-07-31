@@ -5,8 +5,13 @@ const ELFINE = { siteName: "Elfine", siteUrl: "https://elfine-site.vercel.app" }
 
 describe("creditsAnchor", () => {
   it("emits the sk line with class hook and author rel", () => {
+    /* `target`/`rel` since 0.23.0 — the credit sits on a client's page and a
+       visitor who taps it has not decided to leave it. See creditsAnchor's own
+       note, and credit-line.test.ts, which asserts the reasoning rather than
+       just the bytes. */
     expect(creditsAnchor(ELFINE)).toBe(
-      '<a class="sk-credit" href="https://sk-works.vercel.app" rel="author">sk</a>'
+      '<a class="sk-credit" href="https://sk-works.vercel.app"' +
+        ' target="_blank" rel="author noopener">sk</a>'
     );
   });
 

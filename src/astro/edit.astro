@@ -106,6 +106,19 @@ if (csp) {
   if (config.needsStyleAttr) {
     csp.insertStyleResource({ resource: "'unsafe-inline'", kind: "attribute" });
   }
+
+  /* Installing the editor, 0.23.0. Both of these fall back to `default-src`
+     when absent, so on a site whose policy is `default-src 'self'` they change
+     nothing — and on a site that names its sources directly, their absence is
+     a manifest the browser refuses to fetch and a worker it refuses to
+     register, each failing quietly in a way the page cannot see. Naming them
+     costs one token apiece and removes a per-site coin flip.
+
+     `worker-src` rather than trusting `script-src`: the fallback chain for a
+     service worker is worker-src → child-src → script-src, and a site whose
+     script-src is hash-strict would reject a worker it never hashed. */
+  if (config.manifestPath) csp.insertDirective("manifest-src 'self'");
+  if (config.workerPath) csp.insertDirective("worker-src 'self'");
 }
 ---
 
@@ -122,11 +135,35 @@ if (csp) {
          /favicon.svg, which 404'd in the console of every owner whose site
          happens to call the file something else (bug #19). -->
     {config.icon && <link rel="icon" type={config.icon.type} href={config.icon.href} />}
+    <!-- Installing this to a home screen, 0.23.0. The manifest is written into
+         the build by the integration, so a site that never asked for it still
+         gets it and a site that passed `app: false` has neither the file nor
+         this link.
+
+         No apple-touch-icon: iOS ignores SVG there and every site in this
+         fleet ships an SVG, so naming one would produce a home screen icon
+         that silently falls back to a screenshot of the page — which is what
+         happens anyway, and one fewer line that looks like it works. -->
+    {config.manifestPath && <link rel="manifest" href={config.manifestPath} />}
+    <meta name="theme-color" content={config.themeColor} />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="stylesheet" href="/editor-panel.css" />
   </head>
 
   <body>
-    <main data-sk-editor>
+    <!-- The two app facts the bundle needs, handed over as data attributes
+         rather than through `define:vars`. That directive would inline a
+         script into this page, and an inline script is exactly what this
+         route's hash-strict policy is built to refuse — a working feature
+         would have cost the CSP guarantee the whole file is arranged around.
+         An attribute is read by the same bundle that is already loading. -->
+    <main
+      data-sk-editor
+      data-sk-version={config.version}
+      data-sk-worker={config.workerPath ?? ""}
+    >
       <!-- The panel builds itself from the content schemas; without
            JavaScript there is nothing to show and nothing to promise. -->
       <noscript>
@@ -138,7 +175,16 @@ if (csp) {
       import { mountEditor } from "@shaahink/sitekit/editor";
 
       const root = document.querySelector<HTMLElement>("[data-sk-editor]");
-      if (root) mountEditor(root);
+      if (root) {
+        mountEditor(root, {
+          app: {
+            version: root.dataset.skVersion ?? "",
+            /* Empty means the site opted out of the app, and the editor must
+               offer nothing rather than register a worker that is not there. */
+            worker: root.dataset.skWorker || null
+          }
+        });
+      }
     </script>
   </body>
 </html>

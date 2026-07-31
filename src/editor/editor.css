@@ -982,3 +982,160 @@ body {
    with the share link beside it rather than under it. Only while the form is
    open: closed, the link keeps its place on the actions line. */
 .sk-editor__request:has(form) { flex: 1 0 100%; }
+
+/* --- the settings sheet (0.23.0) ---------------------------------------- */
+
+/* One control on the bar where "Sign out" used to be, and one screen behind
+   it. The bar is the surface session 17 measured taking a quarter of a phone
+   screen, so six new things had to arrive as one.
+
+   A full-viewport overlay rather than a `<dialog>`: `showModal()` brings a
+   `::backdrop` this file cannot theme through the site's own custom
+   properties, and the top layer sits above the sticky save bar in a way that
+   varies between engines. This is a positioned element in the panel's own
+   stacking context, which is boring and behaves the same everywhere. */
+.sk-editor__sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  /* Bottom on a phone, where a thumb is; centred once there is room. The two
+     are one declaration because `safe center` falls back to the start edge
+     rather than clipping when the card is taller than the viewport. */
+  align-items: safe center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+  /* The panel scrolls under it; this must not. */
+  overscroll-behavior: contain;
+}
+
+.sk-editor__sheet[hidden] { display: none; }
+
+.sk-editor__sheetcard {
+  box-sizing: border-box;
+  inline-size: min(28rem, 100%);
+  max-block-size: min(85vh, 44rem);
+  overflow-y: auto;
+  padding: 1.25rem;
+  color: var(--sk-editor-ink);
+  background: var(--sk-editor-raise);
+  border: 1px solid var(--sk-editor-line);
+  border-radius: var(--sk-editor-radius);
+}
+
+.sk-editor__sheethead {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.sk-editor__sheettitle {
+  margin: 0;
+  font-family: var(--sk-editor-display);
+  font-size: 1.15rem;
+}
+
+.sk-editor__sheetclose {
+  color: var(--sk-editor-ink);
+  background: none;
+  border: 0;
+  padding: 0.5rem;
+  /* Negative margin so the tap target is 44px while the text still lines up
+     with the heading's baseline. A close button that is hard to hit on a phone
+     is a sheet people leave open. */
+  margin: -0.5rem;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+.sk-editor__sheetclose:hover { color: var(--sk-editor-accent-lit); }
+
+.sk-editor__sheetmessage {
+  margin-block: 0.75rem 0;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--sk-editor-ink);
+  background: var(--sk-editor-line-soft);
+  border-inline-start: 2px solid var(--sk-editor-accent);
+  border-radius: var(--sk-editor-radius);
+}
+.sk-editor__sheetmessage[hidden] { display: none; }
+.sk-editor__sheetmessage--bad { border-inline-start-color: var(--sk-editor-accent-lit); }
+
+.sk-editor__sheetrows { margin-block-start: 0.5rem; }
+
+.sk-editor__sheetsection {
+  padding-block: 1rem;
+  border-block-start: 1px solid var(--sk-editor-line-soft);
+}
+
+.sk-editor__sheetlabel {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sk-editor-muted);
+}
+
+/* The sheet's own secondary button. Bordered rather than underlined, because
+   a settings screen is a list of *actions* and an underlined word in a list of
+   sentences reads as a footnote. */
+.sk-editor__sheetbutton {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.9rem;
+  min-block-size: 44px;
+  margin-block-start: 0.5rem;
+  margin-inline-end: 0.5rem;
+  color: var(--sk-editor-ink);
+  background: none;
+  border: 1px solid var(--sk-editor-line);
+  border-radius: var(--sk-editor-radius);
+  cursor: pointer;
+}
+.sk-editor__sheetbutton:hover:not(:disabled) { border-color: var(--sk-editor-accent); }
+.sk-editor__sheetbutton:disabled {
+  cursor: default;
+  color: var(--sk-editor-muted);
+}
+/* The language you are already reading. `aria-current` carries the meaning for
+   a screen reader and this makes it visible, so the two cannot disagree. */
+.sk-editor__sheetbutton[aria-current="true"] {
+  border-color: var(--sk-editor-accent);
+  color: var(--sk-editor-ink);
+}
+
+.sk-editor__sheetaction { margin-block-start: 0.5rem; }
+
+.sk-editor__langrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+}
+
+.sk-editor__sheetfoot {
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--sk-editor-line-soft);
+}
+
+.sk-editor__version {
+  margin-block: 0.75rem 0;
+  font-size: 0.75rem;
+  color: var(--sk-editor-muted);
+}
+
+/* The device's own way in, on the signed-out screen. Sits above Google's step
+   because it is the faster one and the reader set it up on purpose — and it is
+   `sk-editor__signinbutton`, the class 0.21.0 gave rules to after two releases
+   of painting as a bare browser button beside Google's polished one. Reusing
+   it rather than inventing a fifth button style is the whole point of that
+   fix. */
+.sk-editor__device { margin-block: var(--sk-editor-gap) 0; }
+.sk-editor__device .sk-editor__signinbutton { margin-block-start: 0.5rem; }

@@ -21,5 +21,16 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["src/editor"]
+  /* `src/app` joins the editor rather than getting a fifth config: it is
+     browser code with the same floor and the same needs, and it exists to be
+     imported by the editor. Its other consumer is the fleet console, which
+     compiles it through the site's own build, not through this one.
+
+     `src/version.ts` is listed in three configs on purpose. It holds one
+     exported string constant and no syntax that any target between ES2017 and
+     ES2023 compiles differently, so whichever build emits it last writes the
+     same bytes — which is what makes listing it repeatedly safe rather than
+     merely convenient. Anything else shared across builds needs a real answer,
+     not this one. */
+  "include": ["src/editor", "src/app", "src/version.ts"]
 }
