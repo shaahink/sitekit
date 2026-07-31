@@ -30,6 +30,11 @@ export interface TreeFile {
   base64?: string;
 }
 
+export interface Expectation {
+  path: string;
+  sha: string;
+}
+
 export interface CommitTreeOptions {
   message: string;
   /** The blob sha the edit was based on, and the path it belongs to. GitHub's
@@ -37,8 +42,13 @@ export interface CommitTreeOptions {
       longer matches; the Git Data API has nothing equivalent, so it is checked
       here against the tree the commit is about to be built on. Without it two
       owners — or two tabs — silently overwrite each other, which is the one
-      thing the text path has always been careful about. */
-  expect?: { path: string; sha: string };
+      thing the text path has always been careful about.
+
+      A list, since 0.20.0, because putting a change back writes every content
+      file that change touched — two of them on a bilingual site — and one
+      guarded path out of two is a guard that reads as one and is not. A save
+      carrying photographs still passes the single object it always did. */
+  expect?: Expectation | Expectation[];
 }
 
 /** Commits every file as one commit and returns where it landed. */
@@ -57,7 +67,12 @@ export async function commitFiles(
   const commit = await call(`/repos/${access.repo}/git/commits/${headSha}`, access);
   const baseTree = commit.tree?.sha as string;
 
-  if (options.expect) await checkUnmoved(options.expect, baseTree, access);
+  const expectations = options.expect
+    ? Array.isArray(options.expect)
+      ? options.expect
+      : [options.expect]
+    : [];
+  if (expectations.length) await checkUnmoved(expectations, baseTree, access);
 
   /* Blobs first, and in parallel: a phone photograph and a YAML file have
      nothing to say to each other, and the wait is the owner's. */
@@ -108,7 +123,10 @@ export async function commitFiles(
   if (moved.status === 422) throw new ConflictError("the branch moved while saving");
   if (!moved.ok) throw new Error(`update ref: ${moved.status} ${moved.text}`);
 
-  return { sha: fileShaOf(blobs, options.expect?.path) ?? (made.sha as string), commit: made.html_url as string };
+  return {
+    sha: fileShaOf(blobs, expectations[0]?.path) ?? (made.sha as string),
+    commit: made.html_url as string
+  };
 }
 
 /** The new blob sha for the content file, so the panel can keep saving without
@@ -118,13 +136,14 @@ function fileShaOf(blobs: Array<{ path: string; sha: string }>, path?: string): 
   return blobs.find((blob) => blob.path === path)?.sha;
 }
 
-/** Has the file this edit was based on moved since it was read?
+/** Have the files this edit was based on moved since they were read?
 
     Asked of the tree the commit is about to be built on, which is the only
     version that matters: a check against `HEAD` a moment earlier would be
-    answering about a different commit than the one being extended. */
+    answering about a different commit than the one being extended. One tree
+    read covers every path, however many there are. */
 async function checkUnmoved(
-  expect: { path: string; sha: string },
+  expect: Expectation[],
   baseTree: string,
   access: RepoAccess
 ): Promise<void> {
@@ -132,13 +151,19 @@ async function checkUnmoved(
     `/repos/${access.repo}/git/trees/${baseTree}?recursive=1`,
     access
   );
-  const entry = (tree.tree as Array<{ path: string; sha: string }> | undefined)?.find(
-    (item) => item.path === expect.path
+  const entries = new Map(
+    ((tree.tree as Array<{ path: string; sha: string }> | undefined) ?? []).map((item) => [
+      item.path,
+      item.sha
+    ])
   );
-  /* A missing file is a conflict too: it means the entry was deleted or
-     renamed under the edit, and writing it back would silently resurrect it. */
-  if (!entry || entry.sha !== expect.sha) {
-    throw new ConflictError(`${expect.path} moved under the edit`);
+  for (const wanted of expect) {
+    /* A missing file is a conflict too: it means the entry was deleted or
+       renamed under the edit, and writing it back would silently resurrect
+       it. */
+    if (entries.get(wanted.path) !== wanted.sha) {
+      throw new ConflictError(`${wanted.path} moved under the edit`);
+    }
   }
 }
 

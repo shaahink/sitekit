@@ -33,6 +33,39 @@ export async function entryIds(config: CollectionConfig, access: RepoAccess): Pr
   return config.dir ? listEntries(config.dir, access) : [entryOf(config)];
 }
 
+/** Which collection and entry a repository path belongs to, or undefined when
+    no collection claims it.
+    -------------------------------------------------------------------------
+    `filePath` read backwards, and it exists for the same reason `filePath`
+    does: putting a change back (restore.ts) starts from a list of paths GitHub
+    named and has to get from each one to the Zod schema that says whether the
+    restored bytes are still valid content. Without this it would be guessing,
+    and the one thing a restore must never do is write a document the build
+    would then refuse.
+
+    A directory collection claims `${dir}/${entry}.yaml` and nothing deeper: a
+    path with another slash in it is in a subdirectory the editor has never
+    listed, and treating it as an entry would invent an id that `listEntries`
+    disagrees with. */
+export function collectionOfPath(
+  collections: Record<string, CollectionConfig>,
+  path: string
+): { name: string; config: CollectionConfig; entry: string } | undefined {
+  for (const [name, config] of Object.entries(collections)) {
+    if (config.dir) {
+      const dir = `${config.dir.replace(/\/+$/, "")}/`;
+      if (!path.startsWith(dir)) continue;
+      const rest = path.slice(dir.length);
+      if (rest.includes("/") || !/\.ya?ml$/.test(rest)) continue;
+      const entry = rest.replace(/\.ya?ml$/, "");
+      if (!ENTRY.test(entry)) continue;
+      return { name, config, entry };
+    }
+    if (config.file === path) return { name, config, entry: entryOf(config) };
+  }
+  return undefined;
+}
+
 /** Where an entry can be seen on the site, so the panel can offer to go and
     edit it in place. A pattern covers a collection whose URLs are regular
     (`/projects/{entry}.html`); a map covers one whose aren't.

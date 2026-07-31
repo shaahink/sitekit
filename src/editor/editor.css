@@ -122,6 +122,20 @@ body {
 
 .sk-editor__picker { margin-block: var(--sk-editor-gap); }
 
+/* The other language of this page. One line under the picker on the two
+   bilingual sites, and nothing at all on the other five — `hidden` does that,
+   so the rule below never applies to a site it has no answer for. */
+.sk-editor__siblings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.7rem;
+  align-items: baseline;
+  margin-block: 0.45rem 0;
+  font-size: 0.9rem;
+}
+.sk-editor__siblings[hidden] { display: none; }
+.sk-editor__siblinglabel { color: var(--sk-editor-dim); }
+
 /* Finding a word.
    ---------------------------------------------------------------------------
    Under the picker, above the form. **Two lists, and the order is the point:**
@@ -864,6 +878,38 @@ body {
   color: var(--sk-editor-muted);
   line-height: 1.55;
 }
+
+/* Putting a change back. Closed, it is a link at the end of the row; open, it
+   takes the whole row — because on a phone a sentence sharing a flex line with
+   two buttons wraps into a shape where it is not obvious which button answers
+   it, and this is the one control on this panel that writes to a live site.
+
+   A class rather than `:has()`, so the layout does not depend on a selector
+   whose support is newer than some of the phones this fleet is read on. */
+.sk-editor__restore { margin-inline-start: auto; }
+.sk-editor__restore.is-asking { flex-basis: 100%; margin-inline-start: 0; }
+
+.sk-editor__restoreask {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+}
+
+.sk-editor__restorequestion {
+  font-size: 0.92rem;
+  color: var(--sk-editor-dim);
+  flex-basis: 100%;
+  line-height: 1.5;
+}
+
+/* The one button in this panel whose press is not undoable by pressing it
+   again, marked as such. Not red: it is not a destructive action, it is a
+   deliberate one, and the panel's own accent is what it uses for the thing it
+   most wants read. */
+.sk-editor__restoreyes { color: var(--sk-editor-accent-lit); }
+
+.sk-editor__restoredone { margin-block-start: 0.6rem; }
 
 .sk-editor__homeactions {
   display: flex;

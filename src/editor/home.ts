@@ -26,7 +26,8 @@
    inline. */
 
 import { el, link } from "./dom.js";
-import { fill, type EditorStrings } from "./strings.js";
+import { digitsFor, fill, type EditorStrings } from "./strings.js";
+import { plural } from "./values.js";
 
 export interface HomeTotals {
   pageviews: number;
@@ -81,11 +82,32 @@ export interface HomeData {
    it by anyway. Dismissing it is not a preference worth a round-trip. */
 const SEEN_KEY = "sk-editor-welcome-seen";
 
+export interface Restored {
+  /** False when the site already held what the restore would have written.
+      Nothing was committed and nothing is rebuilding, and the panel says so
+      rather than promising a deploy that is not happening. */
+  changed: boolean;
+  /** How many pages moved. */
+  files: number;
+}
+
 export interface HomeOptions {
   strings: EditorStrings;
+  /** Which language the panel is speaking, for the counted noun in the restore
+      confirmation. A Farsi owner counts in Persian digits everywhere else in
+      this panel and should here too. */
+  lang?: string;
   /** Fires when the owner asks for something bigger. Resolves to the issue URL
       on success, or rejects with a message worth showing. */
   onRequest: (text: string) => Promise<string>;
+  /** Fires when the owner puts a change back. Resolves with what happened, or
+      rejects with a message worth showing — the server's own sentence, which
+      knows which of restore.ts's five refusals applied.
+
+      Absent takes the control away entirely. That is not a feature flag: it is
+      the same rule the rest of this panel follows, which is that an offer that
+      cannot be kept is worse than no offer. */
+  onRestore?: (sha: string) => Promise<Restored>;
   /** Test seam. The panel is otherwise unmountable without a real storage. */
   storage?: Storage;
 }
@@ -136,7 +158,10 @@ export function home(options: HomeOptions): {
       blocks.textContent = "";
       const traffic = trafficBlock(strings, data);
       if (traffic) blocks.append(traffic);
-      const changes = changesBlock(strings, data);
+      const changes = changesBlock(strings, data, {
+        ...(options.onRestore ? { onRestore: options.onRestore } : {}),
+        digits: digitsFor(options.lang)
+      });
       if (changes) blocks.append(changes);
       /* Appended rather than rebuilt into `actions`, so the request button
          keeps its place and any half-typed request survives the arrival of
@@ -297,7 +322,16 @@ export function trafficChange(window: HomeWindow, strings: EditorStrings): strin
 
 /* --- what I changed, and did it go live --------------------------------- */
 
-function changesBlock(strings: EditorStrings, data: HomeData): HTMLElement | null {
+interface ChangesOptions {
+  onRestore?: (sha: string) => Promise<Restored>;
+  digits: (n: number) => string;
+}
+
+function changesBlock(
+  strings: EditorStrings,
+  data: HomeData,
+  options: ChangesOptions
+): HTMLElement | null {
   const changes = data.changes ?? [];
   const block = el("section", "sk-editor__block");
   block.append(el("h3", "sk-editor__blocktitle", strings.homeChangesTitle));
@@ -345,10 +379,105 @@ function changesBlock(strings: EditorStrings, data: HomeData): HTMLElement | nul
     item.append(when);
     item.append(el("span", "sk-editor__changewho", changeAuthor(change, strings)));
     if (change.url) item.append(link(change.url, strings.homeChangeDetail));
+    if (options.onRestore) {
+      item.append(restoreControl(strings, block, change.sha, options.onRestore, options.digits));
+    }
     list.append(item);
   }
   block.append(list);
   return block;
+}
+
+/* --- putting one back ---------------------------------------------------- */
+
+/** The control on one row: a button, then a question, then an answer.
+    -------------------------------------------------------------------------
+    Two-step on purpose, and the confirmation is not ceremony. This writes a
+    commit to a live site and the commit is the production deploy — one
+    mis-tapped thumb on a phone would be a rebuild of somebody's business, and
+    unlike Save there is nothing typed to warn about losing. So the question
+    says what moves, how many pages move, and that the site rebuilds, and the
+    confirming button repeats the verb rather than saying "Yes".
+
+    On success every other control in the block goes. After one restore the
+    remaining rows describe a site that no longer exists — the one above it now
+    has a newer commit on top of it, and restore.ts would (correctly) refuse
+    them with "put the newest change back first". Offering buttons whose only
+    possible answer is a refusal is worse than offering none, so the block says
+    what happened once and stops. */
+function restoreControl(
+  strings: EditorStrings,
+  block: HTMLElement,
+  sha: string,
+  onRestore: (sha: string) => Promise<Restored>,
+  digits: (n: number) => string
+): HTMLElement {
+  const wrap = el("span", "sk-editor__restore");
+  const open = el("button", "sk-editor__link", strings.homeRestore);
+  open.type = "button";
+  wrap.append(open);
+
+  open.addEventListener("click", () => {
+    open.hidden = true;
+    wrap.classList.add("is-asking");
+    const ask = el("span", "sk-editor__restoreask");
+    const question = el("span", "sk-editor__restorequestion");
+    const yes = el("button", "sk-editor__link sk-editor__restoreyes", strings.homeRestoreYes);
+    yes.type = "button";
+    const no = el("button", "sk-editor__link", strings.cancel);
+    no.type = "button";
+    ask.append(question, yes, no);
+    wrap.append(ask);
+
+    question.textContent = strings.homeRestoreConfirm;
+
+    no.addEventListener("click", () => {
+      ask.remove();
+      wrap.classList.remove("is-asking");
+      open.hidden = false;
+    });
+
+    yes.addEventListener("click", () => {
+      yes.disabled = true;
+      no.hidden = true;
+      question.textContent = strings.homeRestoreBusy;
+      void onRestore(sha).then(
+        (result) => {
+          if (!result.changed) {
+            /* Nothing was committed, so nothing is rebuilding. Saying "your
+               site is rebuilding" here would be the panel making a promise the
+               fleet's deploy budget is not paying for. */
+            question.textContent = strings.homeRestoreNothing;
+            yes.remove();
+            return;
+          }
+          for (const other of block.querySelectorAll(".sk-editor__restore")) other.remove();
+          const done = el(
+            "p",
+            "sk-editor__note sk-editor__restoredone",
+            /* The count is the server's, which is the only honest source for
+               it: a bilingual site's one save is two files and nothing on this
+               side could have known that before it happened. */
+            fill(strings.homeRestoreDone, {
+              files: plural(result.files, strings.page, strings.pages, digits)
+            })
+          );
+          block.append(done);
+        },
+        (error: Error) => {
+          /* The server's own sentence, verbatim. It is the only thing that
+             knows which of the five refusals applied, and "something went
+             wrong" would send an owner to a person for a question that has
+             already been answered. */
+          question.textContent = error.message || strings.homeRestoreFailed;
+          yes.disabled = false;
+          no.hidden = false;
+        }
+      );
+    });
+  });
+
+  return wrap;
 }
 
 /** Whose change this was. The payload has carried it since 0.13.0 and the panel

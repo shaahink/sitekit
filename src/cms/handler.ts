@@ -7,6 +7,7 @@
    GET  ?search=              every field on every page matching those words
    POST {collection, entry, edits, sha}   validate, commit, report the commit
    POST {request: {text, page}}           file a content request as an issue
+   POST {restore: {sha}}                  put one of the owner's changes back
 
    The last three of those arrived with 7.7 and 0.20.0 and are here rather than
    in endpoints of their own for one reason: a second `api/` file is a second
@@ -45,6 +46,7 @@ import { findField, savablePaths, templateOf, valueAt } from "../editor/values.j
 import type { Field } from "./fields.js";
 import { ownerHome } from "./home.js";
 import { fileRequest, RequestError } from "./requests.js";
+import { putBack, RestoreError } from "./restore.js";
 import { applyEdits, readValues, type Edit } from "./yaml.js";
 import { readSession, renewSession, type Session } from "./session.js";
 import { allows } from "./allowlist.js";
@@ -202,6 +204,9 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
       /** "Ask for something bigger" — a different kind of save entirely, and
           the only POST here that writes nothing to the content. */
       request?: { text?: string; page?: string };
+      /** "Put this back" — a commit from the owner's own change list, undone
+          over the content files it touched. See restore.ts. */
+      restore?: { sha?: string };
     };
     try {
       payload = (await request.json()) as typeof payload;
@@ -234,6 +239,36 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
         }
         console.error("cms request failed:", (error as Error).message);
         return json({ ok: false, error: "Couldn't send that just now. Your words are still here." }, 502);
+      }
+    }
+
+    /* Putting a change back. Above the `collection` branch because it names
+       none — the change itself says which files it touched, which is the whole
+       reason an owner can press one button rather than reconstructing an old
+       version of six fields by hand. */
+    if (payload.restore) {
+      let access: RepoAccess;
+      try {
+        access = await repoAccess(env, userAgent);
+      } catch (error) {
+        console.error("cms: credential resolution failed:", (error as Error).message);
+        return json({ ok: false, error: "The editor can't reach the repository." }, 502);
+      }
+      try {
+        const restored = await putBack(access, options.collections, payload.restore.sha ?? "", {
+          who: { name: session.name, email: session.email }
+        });
+        return withGate(json({ ok: true, restored }), gate);
+      } catch (error) {
+        if (error instanceof RestoreError) return json({ ok: false, error: error.message }, 400);
+        if (error instanceof ConflictError) {
+          return json(
+            { ok: false, error: "Someone else edited this since you opened it — reload and try again." },
+            409
+          );
+        }
+        console.error("cms restore failed:", (error as Error).message);
+        return json({ ok: false, error: "Couldn't put that back just now. Nothing was changed." }, 502);
       }
     }
 

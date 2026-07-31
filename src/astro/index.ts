@@ -53,6 +53,21 @@
 export { checkAnnotations } from "./annotations.js";
 export type { AnnotationCheckOptions, AnnotationProblem } from "./annotations.js";
 
+/* And the third, added in 0.20.0. Separate from the annotation checker for the
+   same reason that one is separate from the route — they answer different
+   questions and a site should be able to have either without the other — and
+   beside it in the same import for the same reason: they are configured in the
+   same array from the same `editable` map, and two imports for one line of
+   wiring is one more thing a new site can half-copy. */
+export {
+  checkPlaceholders,
+  checkEntry,
+  allowsPath,
+  entriesOnDisk,
+  findPlaceholders
+} from "./placeholders.js";
+export type { PlaceholderCheckOptions, PlaceholderProblem } from "./placeholders.js";
+
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

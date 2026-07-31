@@ -328,6 +328,22 @@ export interface EditorStrings {
       it is undone by signing in and editing again rather than by a setting. */
   hintDismissTitle: string;
 
+  /* --- the other language of this page (0.20.0, session 23 gap 2) --------- */
+
+  /** The lead-in to one button per other language of the page on screen.
+      Absent from the panel entirely on a site whose entries have no locale in
+      their ids, which is five of the seven — see siblings.ts.
+
+      It names the *other* language rather than the current one because the
+      picker above it already says which page is open, and because the mistake
+      this exists to prevent is not knowing that the other one is there. */
+  siblingLabel: string;
+  /** `{label}` — the site's own word for that language, out of its
+      `entryLabels`. Not the kit's: "Français" is what elfine's schema says and
+      what her picker says, and an editor inventing its own name for her page
+      would be one more thing that has to agree. */
+  siblingTitle: string;
+
   /* --- the owner's home (7.7) -------------------------------------------- */
 
   /** The first-run panel. Three sentences and a button, not a tour: what this
@@ -368,6 +384,50 @@ export interface EditorStrings {
       telling an owner with a year of history that nothing has ever changed. */
   homeChangesUnavailable: string;
   homeChangeDetail: string;
+
+  /* --- putting a change back (0.20.0, session 23 gap 1) ------------------- */
+
+  /** The control on every row of the change list.
+
+      **Not "undo" and not "revert", and that is a constraint rather than a
+      preference.** `inline-bar.ts` already owns both words on this same
+      surface, for the *unsaved* field-level case — `revert`, `inlineRevert`,
+      "Undo this one", "undo everything". A saved change put back is a
+      different action with a different blast radius, and two very different
+      things behind one word is how an owner learns to distrust both. So this
+      is said from their side: the thing goes back to how it was. */
+  homeRestore: string;
+  /** Asked before it happens, because it writes to a live site and the write
+      is the production rebuild — and unlike Save there is nothing typed whose
+      loss would warn anybody.
+
+      **It carries no count, deliberately.** How many pages a change touched is
+      only known after the server has compared two commits, and asking for that
+      before the owner has said yes would be a round trip to decorate a
+      question they may answer no to. The count is in `homeRestoreDone`, where
+      it is measured rather than guessed. */
+  homeRestoreConfirm: string;
+  /** The confirming button. It repeats the verb rather than saying "Yes",
+      which is the difference between reading the question and not. */
+  homeRestoreYes: string;
+  homeRestoreBusy: string;
+  /** Said once for the whole list, because after one restore every other row
+      in it is describing a state the site is no longer in. `{files}` — how
+      many pages actually moved, counted by the server and pluralised through
+      `plural()`, so a Farsi owner reads it in Persian digits like everything
+      else they are counted. */
+  homeRestoreDone: string;
+  /** Pressing it on a change whose content effect is already gone. Not a
+      failure: nothing was committed, so nothing was deployed. */
+  homeRestoreNothing: string;
+  /** The fallback when the server said nothing readable. Every other refusal
+      is the server's own sentence, shown verbatim — it knows which of the five
+      reasons applied and this does not. */
+  homeRestoreFailed: string;
+  /** The noun `homeRestoreDone`'s `{files}` is counted in. */
+  page: string;
+  pages: string;
+
   /** `{who}` — the person the editor recorded on the commit. */
   homeChangeBy: string;
   /** For a commit with no editor attribution, which means it was not an owner's
@@ -554,6 +614,9 @@ export const defaultStrings: EditorStrings = {
   hintDismiss: "×",
   hintDismissTitle: "Don't offer this on this device",
 
+  siblingLabel: "This page is also in:",
+  siblingTitle: "Open this page in {label}",
+
   /* --- the owner's home -------------------------------------------------- */
 
   /* Voice, and it is the whole of Decision 2: say what this is, say that
@@ -564,8 +627,15 @@ export const defaultStrings: EditorStrings = {
   homeWelcomeTitle: "This is where you change your site",
   homeWelcomeBody:
     "Everything you type here goes onto your real website, usually within a minute or two. You can also tap the words on your own pages and type over them.",
+  /* Corrected in 0.20.0, and the correction is the point. This sentence said
+     "anything can be put back the way it was — just ask" on the first screen
+     of every site in three languages, and session 23 measured what was behind
+     it: zero controls that could put anything back. The promise was kept by a
+     person, per owner, forever. Now the list below carries the control, and
+     the sentence says where it is; "just ask" survives for what the list does
+     not reach, which is anything older than five changes. */
   homeWelcomeUndo:
-    "Nothing you do here is permanent. Every change is kept, so anything can be put back the way it was — just ask.",
+    "Nothing you do here is permanent. Every change below has a “Put this back” next to it, and anything older can be put back too — just ask.",
   homeWelcomeAsk:
     "For anything bigger than words and pictures — a new section, a different layout — use “Ask for a change” below and describe what you want.",
   homeWelcomeClose: "Got it",
@@ -592,6 +662,22 @@ export const defaultStrings: EditorStrings = {
   homeChangesUnavailable:
     "Couldn't read your recent changes just now. Your site is fine and so are your words — this list should be back in a minute.",
   homeChangeDetail: "See exactly what changed",
+
+  /* The words an owner would use, and none of git's. "Put this back" is what
+     the welcome notice has always promised in prose; saying it identically on
+     the button is the whole of making the promise findable. */
+  homeRestore: "Put this back",
+  homeRestoreConfirm:
+    "This puts the pages this change touched back to how they were before it, and your site rebuilds. Sure?",
+  homeRestoreYes: "Yes, put it back",
+  homeRestoreBusy: "Putting it back…",
+  homeRestoreDone:
+    "Put back — {files}. Your site is rebuilding: give it a minute, then reload this page.",
+  homeRestoreNothing: "That's already how your site is. Nothing changed.",
+  homeRestoreFailed: "Couldn't put that back just now. Nothing was changed — try again in a moment.",
+  page: "page",
+  pages: "pages",
+
   homeChangeBy: "by {who}",
   /* A commit the editor did not write is one of ours. Saying "by sk" is both
      true and the thing that makes the row make sense to somebody who is sure
@@ -784,11 +870,14 @@ const fr: EditorStrings = {
   hintDismiss: "×",
   hintDismissTitle: "Ne plus proposer ceci sur cet appareil",
 
+  siblingLabel: "Cette page existe aussi en :",
+  siblingTitle: "Ouvrir cette page en {label}",
+
   homeWelcomeTitle: "C’est ici que vous changez votre site",
   homeWelcomeBody:
     "Tout ce que vous écrivez ici va sur votre vrai site, en général en une ou deux minutes. Vous pouvez aussi toucher les mots sur vos propres pages et écrire par-dessus.",
   homeWelcomeUndo:
-    "Rien de ce que vous faites ici n’est définitif. Chaque changement est conservé, donc tout peut être remis comme avant — il suffit de demander.",
+    "Rien de ce que vous faites ici n’est définitif. Chaque changement ci-dessous a un « Remettre comme avant » à côté, et tout ce qui est plus ancien peut aussi être remis — il suffit de demander.",
   homeWelcomeAsk:
     "Pour tout ce qui dépasse les mots et les images — une nouvelle section, une autre mise en page — utilisez « Demander un changement » ci-dessous et décrivez ce que vous voulez.",
   homeWelcomeClose: "C’est compris",
@@ -810,6 +899,20 @@ const fr: EditorStrings = {
   homeChangesUnavailable:
     "Impossible de lire vos changements récents pour le moment. Votre site va bien et vos mots aussi — cette liste devrait revenir dans une minute.",
   homeChangeDetail: "Voir exactement ce qui a changé",
+
+  homeRestore: "Remettre comme avant",
+  homeRestoreConfirm:
+    "Cela remet les pages touchées par ce changement comme elles étaient avant, et votre site est reconstruit. C’est bien ça ?",
+  homeRestoreYes: "Oui, remettez-le",
+  homeRestoreBusy: "On le remet…",
+  homeRestoreDone:
+    "Remis comme avant — {files}. Votre site se reconstruit : laissez-lui une minute, puis rechargez cette page.",
+  homeRestoreNothing: "Votre site est déjà comme ça. Rien n’a changé.",
+  homeRestoreFailed:
+    "Impossible de le remettre pour le moment. Rien n’a changé — réessayez dans un instant.",
+  page: "page",
+  pages: "pages",
+
   homeChangeBy: "par {who}",
   homeChangeByUs: "par sk",
   homeDeployLive: "Votre dernier changement est sur le site.",
@@ -999,11 +1102,14 @@ const fa: EditorStrings = {
   hintDismiss: "×",
   hintDismissTitle: "دیگر این را روی این دستگاه پیشنهاد نده",
 
+  siblingLabel: "این صفحه به این زبان هم هست:",
+  siblingTitle: "این صفحه را به {label} باز کن",
+
   homeWelcomeTitle: "اینجا جایی است که سایتت را عوض می‌کنی",
   homeWelcomeBody:
     "هرچه اینجا بنویسی روی سایت واقعی‌ات می‌رود، معمولاً تا یکی دو دقیقه. می‌توانی روی کلمه‌های صفحه‌های خودت هم بزنی و رویشان بنویسی.",
   homeWelcomeUndo:
-    "هیچ‌کدام از کارهایت اینجا همیشگی نیست. هر تغییری نگه داشته می‌شود، پس هر چیزی را می‌شود به حالت اولش برگرداند — فقط بگو.",
+    "هیچ‌کدام از کارهایت اینجا همیشگی نیست. کنار هر تغییر پایین یک «برش گردان» هست، و هر چیز قدیمی‌تر را هم می‌شود برگرداند — فقط بگو.",
   homeWelcomeAsk:
     "برای هرچیزی بزرگ‌تر از کلمه و عکس — یک بخش تازه، یک چیدمان دیگر — از «درخواست تغییر» پایین استفاده کن و بنویس چه می‌خواهی.",
   homeWelcomeClose: "فهمیدم",
@@ -1025,6 +1131,19 @@ const fa: EditorStrings = {
   homeChangesUnavailable:
     "الان نشد تغییرهای اخیرت را خواند. سایتت سالم است و نوشته‌هایت هم — این فهرست تا یک دقیقه دیگر برمی‌گردد.",
   homeChangeDetail: "دقیقاً ببین چه عوض شد",
+
+  homeRestore: "برش گردان",
+  homeRestoreConfirm:
+    "این صفحه‌هایی را که این تغییر دست زده به حالت قبلش برمی‌گرداند و سایتت دوباره ساخته می‌شود. مطمئنی؟",
+  homeRestoreYes: "آره، برش گردان",
+  homeRestoreBusy: "دارد برمی‌گردد…",
+  homeRestoreDone:
+    "برگشت — {files}. سایتت دارد دوباره ساخته می‌شود: یک دقیقه صبر کن، بعد این صفحه را تازه کن.",
+  homeRestoreNothing: "سایتت همین‌الان همین‌طور است. چیزی عوض نشد.",
+  homeRestoreFailed: "الان نشد برش گرداند. چیزی عوض نشد — کمی بعد دوباره امتحان کن.",
+  page: "صفحه",
+  pages: "صفحه",
+
   homeChangeBy: "به‌دست {who}",
   homeChangeByUs: "به‌دست sk",
   homeDeployLive: "آخرین تغییرت روی سایت است.",

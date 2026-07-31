@@ -60,6 +60,12 @@ export interface DeployState {
    and matched loosely enough that adding a field to the subject later degrades
    to showing the raw subject rather than to showing nothing. */
 const EDIT_SUBJECT = /^Edit\s+(\S+?):\s*(.+?)(?:\s*\(\+(\d+)\s+pictures?\))?$/;
+/* `Put home.en.yaml and 2 more back to how they were before 4ba488c` — the
+   subject restore.ts writes. Parsed here rather than shown raw for the reason
+   the edit subject is: a row in the owner's own list should not be the first
+   place they meet a seven-character hexadecimal number. */
+const PUT_BACK_SUBJECT =
+  /^Put\s+(\S+?)(?:\s+and\s+(\d+)\s+more)?\s+back to how (?:it was|they were) before\s+[0-9a-f]{7,40}$/;
 const TRAILER = /Changed by (.+?) <[^>]*> through the site editor\./;
 
 /** The commits that touched an owner's content, most recent first.
@@ -140,12 +146,14 @@ function describe(commit: any): Change {
   const message: string = commit.commit?.message ?? "";
   const subject = message.split("\n")[0] ?? "";
   const trailer = TRAILER.exec(message);
-  const parsed = EDIT_SUBJECT.exec(subject);
+  const restored = PUT_BACK_SUBJECT.exec(subject);
+  const parsed = restored ? null : EDIT_SUBJECT.exec(subject);
+  const summary = restored ? humanizeRestore(restored) : parsed ? humanize(parsed) : undefined;
 
   return {
     sha: commit.sha,
     subject,
-    ...(parsed ? { summary: humanize(parsed) } : {}),
+    ...(summary === undefined ? {} : { summary }),
     ...(trailer?.[1] ? { who: trailer[1] } : {}),
     at: commit.commit?.author?.date ?? commit.commit?.committer?.date ?? "",
     url: commit.html_url ?? ""
@@ -169,6 +177,18 @@ function humanize(parsed: RegExpExecArray): string {
   const things = count === 1 ? "1 thing" : `${count} things`;
   const photos = pictures ? ` and added ${pictures === 1 ? "a photograph" : `${pictures} photographs`}` : "";
   return `Changed ${things}${photos} on ${file}`;
+}
+
+/** `Put home.en.yaml and 1 more back to how they were before 4ba488c` →
+    `Put home.en and 1 more back to how they were`. The sha comes off for the
+    same reason the field list does above: the row is for the person who pressed
+    the button, and what they need to recognise is which pages moved. */
+function humanizeRestore(parsed: RegExpExecArray): string {
+  const file = (parsed[1] ?? "").replace(/\.ya?ml$/, "");
+  const more = Number(parsed[2] ?? 0);
+  return more
+    ? `Put ${file} and ${more} more back to how they were`
+    : `Put ${file} back to how it was`;
 }
 
 /** Whether the site rebuilt for a commit.

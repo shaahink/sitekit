@@ -49,6 +49,20 @@ const NOT_LANGUAGE: (keyof EditorStrings)[] = [
   "homePageLine"
 ];
 
+/* And the other reason a table can legitimately match the English one: the
+   correct translation is the same word.
+
+   Named per locale rather than added to NOT_LANGUAGE, because these strings
+   very much *are* language — "page" and "pages" are French words that happen
+   to be spelled exactly as the English ones, and Persian's «صفحه» is not, so
+   Farsi must still differ and this list must not let it off. Exempting the key
+   everywhere would have hidden a genuinely untranslated Farsi noun behind a
+   French coincidence. Anything added here needs to be a real word in that
+   language, checked, not a string somebody has not got to yet. */
+const SAME_WORD: Record<string, (keyof EditorStrings)[]> = {
+  fr: ["page", "pages"]
+};
+
 /* Every `{placeholder}` the English table uses, by key: a translation that
    drops one leaves an owner reading a sentence with a hole in it, and one that
    invents a new one leaves literal braces on the page — which is what half of
@@ -85,8 +99,10 @@ describe("every locale table", () => {
 
   for (const [locale, table] of translated) {
     it(`${locale} has no key left in English`, () => {
+      const same = SAME_WORD[locale] ?? [];
       const untranslated = keys.filter(
-        (key) => !NOT_LANGUAGE.includes(key) && table[key] === defaultStrings[key]
+        (key) =>
+          !NOT_LANGUAGE.includes(key) && !same.includes(key) && table[key] === defaultStrings[key]
       );
       expect(untranslated, `${locale} keys still reading as English`).toEqual([]);
     });

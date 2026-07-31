@@ -30,6 +30,7 @@ import { home, type HomeData } from "./home.js";
 import { noteEditorVerdict } from "./marker.js";
 import { render, Uploads, type RenderContext } from "./render.js";
 import { searchBox, type SearchBox, type SiteSearch } from "./search.js";
+import { siblingsOf } from "./siblings.js";
 import {
   AUTH_RESULT_PARAM,
   BACK_PARAM,
@@ -467,6 +468,43 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     }
     picker.append(labelled(strings.editing, select));
 
+    /* The other language of this page, under the picker that is the only route
+       to it today. Measured on elfine: one `<select>` with sixteen options from
+       `site/site.en` to `works/works.fr`, which on a phone is a native
+       full-screen list of sixteen near-identical long strings, and the owner
+       has to know which collection they are in before the locale suffix means
+       anything. This replaces that scan with a fact, derived from the entry ids
+       the site already exposes — no new configuration, and nothing at all on
+       the five sites whose ids have no locale in them. */
+    const siblings = el("p", "sk-editor__siblings");
+    const showSiblings = (): void => {
+      siblings.textContent = "";
+      const slash = select.value.indexOf("/");
+      const name = select.value.slice(0, slash);
+      const id = select.value.slice(slash + 1);
+      const collection = session.collections.find((entry) => entry.name === name);
+      const others = collection ? siblingsOf(id, collection.entries) : [];
+      siblings.hidden = others.length === 0;
+      if (!others.length) return;
+
+      siblings.append(el("span", "sk-editor__siblinglabel", strings.siblingLabel));
+      for (const other of others) {
+        const go = el("button", "sk-editor__link", other.label);
+        go.type = "button";
+        go.title = fill(strings.siblingTitle, { label: other.label });
+        go.addEventListener("click", () => {
+          /* The picker's own move, exactly as a search result elsewhere makes
+             it: point the select and let `change` do the loading. Two routes to
+             another entry that loaded it two different ways is how one of them
+             comes to be subtly wrong. */
+          select.value = `${name}/${other.id}`;
+          select.dispatchEvent(new Event("change"));
+        });
+        siblings.append(go);
+      }
+    };
+    picker.append(siblings);
+
     /* Arriving from a page means arriving to edit *that* page. Without this an
        owner who tapped Home on the Farsi half of a bilingual site would land
        on the English entry — the picker's first option — and the field the bar
@@ -516,7 +554,9 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
        filled when its data lands — the form must never wait on analytics. */
     const owner = home({
       strings,
-      onRequest: (text) => sendRequest(text)
+      lang,
+      onRequest: (text) => sendRequest(text),
+      onRestore: (sha) => sendRestore(sha)
     });
 
     const form = el("div", "sk-editor__form");
@@ -577,9 +617,11 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     select.addEventListener("change", () => {
       showRoute();
+      showSiblings();
       void load(select.value, form, footer, route, finder);
     });
     showRoute();
+    showSiblings();
     void load(select.value, form, footer, route, finder);
   }
 
@@ -1024,6 +1066,38 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     }
     const body = (await response.json()) as { request?: { url?: string } };
     return body.request?.url ?? "";
+  }
+
+  /** Put one of the owner's changes back. The same POST route as everything
+      else here, for the same reason: a second `api/` file is a second file in
+      seven site repos, and this feature's whole claim is that a site's share of
+      it is a version bump. */
+  async function sendRestore(sha: string): Promise<{ changed: boolean; files: number }> {
+    let response: Response;
+    try {
+      response = await fetch(content, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restore: { sha } })
+      });
+    } catch {
+      /* The caller shows `error.message` verbatim, so an unguarded rejection
+         here would put the browser's own "Failed to fetch" in front of an
+         owner — the same trap `sendRequest` was fixed for. */
+      throw new Error(strings.homeRestoreFailed);
+    }
+    if (!response.ok) throw new Error(await errorText(response, strings.homeRestoreFailed));
+    const body = (await response.json()) as {
+      restored?: { changed?: boolean; files?: string[] };
+    };
+    return {
+      /* Absent counts as changed: the panel then tells the owner their site is
+         rebuilding, which is the safe error to make of the two. Telling
+         somebody nothing happened when a commit did land is how they press it
+         again. */
+      changed: body.restored?.changed !== false,
+      files: body.restored?.files?.length ?? 1
+    };
   }
 
   async function errorText(response: Response, fallback: string): Promise<string> {

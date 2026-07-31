@@ -40,7 +40,16 @@ export {
   type SiteHit,
   type SiteSearch
 } from "./search.js";
-export { entryIds, entryOf, entryTitle, entryUrl, filePath, ENTRY } from "./entries.js";
+export {
+  collectionOfPath,
+  entryIds,
+  entryOf,
+  entryTitle,
+  entryUrl,
+  filePath,
+  ENTRY
+} from "./entries.js";
+export { putBack, restoreMessage, RestoreError, type Restored } from "./restore.js";
 export { formModel, type FormModelOptions } from "./form.js";
 export type { BooleanField, Field, FieldCommon, ScalarField, SelectOption } from "./fields.js";
 export { isVisible, visibleOnly, hiddenSections, VISIBLE } from "./visibility.js";
@@ -54,7 +63,7 @@ export {
   type RepoAccess,
   type WriteResult
 } from "./contents.js";
-export { commitFiles, type CommitTreeOptions, type TreeFile } from "./tree.js";
+export { commitFiles, type CommitTreeOptions, type Expectation, type TreeFile } from "./tree.js";
 export {
   prepareUploads,
   resolveUploads,

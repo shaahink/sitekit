@@ -44,9 +44,20 @@ export async function repoIsPublic(access: RepoAccess): Promise<boolean> {
   return result.data.private === false;
 }
 
-/** The file, or null if it isn't there. */
-export async function readFile(path: string, access: RepoAccess): Promise<FileContents | null> {
-  const query = access.branch ? `?ref=${encodeURIComponent(access.branch)}` : "";
+/** The file, or null if it isn't there.
+
+    `ref` overrides the branch for one read. Everything the editor writes reads
+    at the branch head; putting a change back has to read the same path at three
+    different commits (restore.ts), and a second function that only differed in
+    one query parameter would be a second place for "which file is this" to be
+    wrong. */
+export async function readFile(
+  path: string,
+  access: RepoAccess,
+  options: { ref?: string } = {}
+): Promise<FileContents | null> {
+  const ref = options.ref ?? access.branch;
+  const query = ref ? `?ref=${encodeURIComponent(ref)}` : "";
   const result = await gh(`/repos/${access.repo}/contents/${encodePath(path)}${query}`, {
     token: access.token,
     userAgent: access.userAgent
