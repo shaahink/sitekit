@@ -12,12 +12,23 @@
    `revealField` — the same three lines an incoming `#field=` link has used
    since 7.6.
 
-   **This half never asks the server anything.** The panel already holds every
-   field descriptor and the document itself, and every control writes what is
-   typed back into that document as it goes (see `render`), so searching it is
-   free and searches what is on screen *now* rather than what loaded. Searching
-   across the other twenty entries is A3.2's, it needs the content edge, and it
-   is deliberately not started here.
+   ── Two lists, and the difference between them is the whole design ────────
+   **The page in front of the owner: free, client-side, instant.** The panel
+   already holds every field descriptor and the document itself, and every
+   control writes what is typed back into that document as it goes (see
+   `render`), so searching it costs nothing and searches what is on screen
+   *now* rather than what loaded. It answers on the keystroke.
+
+   **Their other pages: the server, and it takes about a second.** A3.2's
+   measurement, against the real repositories: mosleh's 24 files read in 697ms
+   in parallel and 5,555ms one after another, and a warm instance answers in
+   ~250ms because the handler keeps the parse and re-reads only when the
+   branch's head commit sha moves. That is fast enough to be worth having and
+   far too slow to sit in front of the instant half — so it does not. The local
+   list draws on the keystroke and the elsewhere list arrives underneath it,
+   debounced, labelled with which page each match is on, and honest about
+   having failed if it did. An owner who was only ever looking at this page
+   never waits for the other twenty.
 
    ── Was the browser already doing this? ────────────────────────────────────
    Measured in Chrome 150 rather than assumed, because `render.ts` says
@@ -27,276 +38,37 @@
    supported, which is exactly the machinery find-in-page reveals through, and
    the browser's matcher does reach a `<textarea>`'s *value*, including one
    typed a moment ago. What no amount of it can do is say **which section and
-   which field** a match is in, list every match at once, or be reached at all
-   on a phone without going through the browser's own menus. That is the whole
-   of what this file adds, and it is why it is not a duplicate.
+   which field** a match is in, list every match at once, reach a page that is
+   not loaded, or be found at all on a phone without going through the
+   browser's own menus. That is the whole of what this file adds, and it is why
+   it is not a duplicate.
 
    (The full measurement, including that the DevTools protocol exposes no
    find-in-page command at all — so `window.find` was the proxy and is named as
-   one — is in session 21's A3 notes.) */
+   one — is in session 21's A3 notes.)
+
+   The matcher itself is `match.ts`, which has no DOM in it because the handler
+   runs the same code over the other entries. See its header. */
 
 import type { Field } from "../cms/fields.js";
+/* Type-only, and it has to stay that way: the shape of the elsewhere list is
+   the *handler's* shape, and two declarations of one JSON payload is two
+   declarations that drift. `import type` is erased at build, so nothing of the
+   server reaches a visitor's bundle — checked in A3.2's evidence. */
+import type { SiteSearch } from "../cms/search.js";
 import { el } from "./dom.js";
+import { searchEntry, type SearchHit, type Span } from "./match.js";
 import { digitsFor, fill, type EditorStrings } from "./strings.js";
-import { plural, retarget, valueAt } from "./values.js";
+import { plural } from "./values.js";
 
-/** One field the search can offer, with everything the result row says about
-    it already worked out. */
-export interface SearchHit {
-  /** The concrete path, which is what `[data-path]` carries on the control —
-      so picking a result is a `querySelector` and nothing more. */
-  path: string;
-  /** The field's own label, as the panel draws it. */
-  label: string;
-  /** The sections it sits inside, outermost first: `["Rooms", "Room 2"]`. */
-  where: string[];
-  /** Where in the label the query matched, if it did. */
-  labelMatch?: Span;
-  /** The words around a match in the field's current value. Absent when only
-      the label matched — there is nothing useful to quote. */
-  snippet?: Snippet;
-}
-
-export interface Span {
-  from: number;
-  to: number;
-}
-
-export interface Snippet {
-  before: string;
-  match: string;
-  after: string;
-  /** Whether text was cut off at either end, so the row can say so. */
-  cutStart: boolean;
-  cutEnd: boolean;
-}
-
-/* --- folding, and the map that makes it safe ------------------------------ */
-
-/** A folded string beside the offsets each of its characters came from.
-    -------------------------------------------------------------------------
-    The map is the whole reason this is not a `toLowerCase().indexOf()`. A fold
-    that *deletes* a character — a run of whitespace collapsing to one space
-    here, and in A3.3 a zero-width non-joiner going entirely — moves every
-    offset after it, so an index found in the folded text names the wrong place
-    in the real one. Quoting the owner's own words back at them off a shifted
-    index is how a search comes to underline the wrong half of a sentence.
-
-    So every folded character remembers the source code point it came from, and
-    a match is mapped back through it before anything is read out of the
-    original string. The original is never modified, and nothing in this file
-    is on the write path — the stored bytes are the ones the file had. */
-export interface Folded {
-  text: string;
-  /** Source offset each folded character starts at. */
-  start: number[];
-  /** Source offset each folded character ends at. */
-  end: number[];
-}
-
-/** What one code point folds to, for the purpose of comparison only.
-
-    Deliberately thin at this stage: case, and any run of whitespace as a
-    single space so that a phrase still matches across the line breaks a YAML
-    block scalar puts in. **A3.3 extends exactly this function** — ZWNJ,
-    tanween, Arabic-versus-Persian ye and kaf, Persian versus Latin digits —
-    and the machinery it needs is the deletion case, which is already here and
-    already tested.
-
-    Three of those four the browser's own matcher turns out to do already
-    (measured: `معمولا` finds `معمولاً`, `کتابها` finds `کتاب‌ها`, `123` finds
-    `۱۲۳`); the kaf it does not. None of that helps here, because this file is
-    its own matcher — it is recorded because it says what an owner expects. */
-function foldChar(ch: string): string {
-  if (/\s/.test(ch)) return " ";
-  return ch.toLowerCase();
-}
-
-export function fold(source: string): Folded {
-  let text = "";
-  const start: number[] = [];
-  const end: number[] = [];
-  let at = 0;
-  /* By code point, not by code unit: a surrogate pair is one character to fold
-     and its two units must map to the same source span. */
-  for (const ch of source) {
-    const from = at;
-    at += ch.length;
-    const mapped = foldChar(ch);
-    /* A collapsed run of whitespace emits one space and then nothing, which is
-       the deletion case the map exists for. */
-    if (mapped === " " && text.endsWith(" ")) continue;
-    for (let i = 0; i < mapped.length; i++) {
-      start.push(from);
-      end.push(at);
-    }
-    text += mapped;
-  }
-  return { text, start, end };
-}
-
-/** Where `query` sits inside `source`, in `source`'s own offsets, or null.
-    Both sides are folded, so the comparison is on the folded text and the
-    answer is on the real one. */
-export function findIn(source: string, query: Folded): Span | null {
-  if (!query.text) return null;
-  const haystack = fold(source);
-  const at = haystack.text.indexOf(query.text);
-  if (at === -1) return null;
-  const last = at + query.text.length - 1;
-  return { from: haystack.start[at] ?? 0, to: haystack.end[last] ?? source.length };
-}
-
-/** The query, folded once for the whole pass. Trimmed at the source rather
-    than after folding, so the map stays aligned with the text it describes —
-    and a query that is spaces alone folds to nothing and matches nothing,
-    rather than matching every field on the page. */
-export function foldQuery(query: string): Folded {
-  return fold(query.trim());
-}
-
-/* --- what there is to search --------------------------------------------- */
-
-/** One searchable field, before anything has been searched for. */
-export interface Candidate {
-  path: string;
-  label: string;
-  where: string[];
-  /** The field's current value in full, as the owner would read it — never
-      truncated, because this is the string the query is compared against and a
-      trimmed one would quietly stop finding anything past its own end. Empty
-      for the kinds that have no words in them. */
-  text: string;
-}
-
-export interface SearchOptions {
-  /** What a section's on/off switch is called on screen. The schema's own
-      label for it is usually "visible", which is not the word the panel draws
-      — see `sectionSwitch` — and searching should find what is written, not
-      what the file happens to call it. */
-  toggleLabel?: string;
-  /** How many hits to hand back. The list is a list an owner reads, and a
-      single letter matches every field on the page. */
-  limit?: number;
-}
-
-/** Every field on screen, in the order the panel drew them.
-    -------------------------------------------------------------------------
-    Array rows are expanded against the real values through `retarget`, exactly
-    as `render` draws them and `emptyRequired` walks them, so the third slide's
-    caption is offered in its own right and its result row says "Slides — Slide
-    3" rather than the template it came from. */
-export function entryFields(
-  fields: Field[],
-  values: unknown,
-  options: SearchOptions = {}
-): Candidate[] {
-  const out: Candidate[] = [];
-  const walk = (field: Field, where: string[]): void => {
-    if (field.kind === "group") {
-      const inside = [...where, field.label];
-      /* The switch is not in `fields` — form.ts lifts it out so the panel can
-         draw it in the summary — so a walk that only descends `fields` cannot
-         offer "show this section", which is one of the few things in here an
-         owner goes hunting for. */
-      if (field.toggle && options.toggleLabel) {
-        out.push({ path: field.toggle.path, label: options.toggleLabel, where: inside, text: "" });
-      }
-      for (const child of field.fields) walk(child, inside);
-      return;
-    }
-
-    if (field.kind === "array") {
-      const rows = valueAt(values, field.path);
-      if (!Array.isArray(rows)) return;
-      const inside = [...where, field.label];
-      rows.forEach((_, index) => {
-        const row = retarget(field.item, `${field.path}[]`, `${field.path}[${index}]`);
-        /* The same number the panel puts on the row, so a result names
-           something an owner can see once they get there. */
-        walk({ ...row, label: `${field.item.label} ${index + 1}` }, inside);
-      });
-      return;
-    }
-
-    out.push({ path: field.path, label: field.label, where, text: textOf(field, values) });
-  };
-
-  for (const field of fields) walk(field, []);
-  return out;
-}
-
-/** A field's current value as words. Anything that is not words — a checkbox,
-    an unexpected object where a string was described — is empty rather than
-    `[object Object]`, which is `render`'s own rule for the same reason. */
-function textOf(field: Field, values: unknown): string {
-  const value = valueAt(values, field.path);
-  if (field.kind === "boolean") return "";
-  if (field.kind === "select") {
-    /* What the owner sees in the box, not the value behind it. */
-    const option = field.options.find((each) => each.value === value);
-    return option ? option.label : scalar(value);
-  }
-  return scalar(value);
-}
-
-function scalar(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "object") return "";
-  return String(value);
-}
-
-const SNIPPET_BEFORE = 34;
-const SNIPPET_AFTER = 60;
-
-function snippetAround(text: string, span: Span): Snippet {
-  const from = Math.max(0, span.from - SNIPPET_BEFORE);
-  const to = Math.min(text.length, span.to + SNIPPET_AFTER);
-  return {
-    before: text.slice(from, span.from),
-    match: text.slice(span.from, span.to),
-    after: text.slice(span.to, to),
-    cutStart: from > 0,
-    cutEnd: to < text.length
-  };
-}
-
-/** The fields matching `query`, label matches first and document order within.
-    -------------------------------------------------------------------------
-    A label match ranks above a value match because an owner who types "email"
-    usually means the field called Email, and one who types a sentence means the
-    sentence. Both kinds are offered either way; only the order changes. */
-export function searchEntry(
-  fields: Field[],
-  values: unknown,
-  query: string,
-  options: SearchOptions = {}
-): { hits: SearchHit[]; total: number } {
-  const needle = foldQuery(query);
-  if (!needle.text) return { hits: [], total: 0 };
-
-  const byLabel: SearchHit[] = [];
-  const byValue: SearchHit[] = [];
-
-  for (const candidate of entryFields(fields, values, options)) {
-    const labelMatch = findIn(candidate.label, needle);
-    const valueMatch = candidate.text ? findIn(candidate.text, needle) : null;
-    if (!labelMatch && !valueMatch) continue;
-
-    const hit: SearchHit = {
-      path: candidate.path,
-      label: candidate.label,
-      where: candidate.where,
-      ...(labelMatch ? { labelMatch } : {}),
-      ...(valueMatch ? { snippet: snippetAround(candidate.text, valueMatch) } : {})
-    };
-    (labelMatch ? byLabel : byValue).push(hit);
-  }
-
-  const all = [...byLabel, ...byValue];
-  const limit = options.limit ?? 20;
-  return { hits: all.slice(0, limit), total: all.length };
-}
+/* Re-exported so every existing caller — and the suite that has tested this
+   arithmetic since A3.1 — keeps importing it from where it has always been.
+   New server-side callers import `match.js` directly, because importing *this*
+   file drags the string table in behind it. That is the whole reason for the
+   split; see match.ts's header. */
+export type { Candidate, Folded, SearchHit, SearchOptions, Snippet, Span } from "./match.js";
+export { entryFields, findIn, fold, foldQuery, searchEntry } from "./match.js";
+export type { SiteHit, SiteSearch } from "../cms/search.js";
 
 /* --- the field at the top of the panel ------------------------------------ */
 
@@ -305,19 +77,42 @@ export interface SearchBoxOptions {
   /** For the count, which is a number and must be written in the panel's own
       digits — "۳ مورد", not "3 مورد". Same rule as the save button's. */
   lang: string;
-  /** Called with a concrete path when a result is chosen. The panel passes
-      `revealField`, which opens every section above the control and focuses
-      it. */
+  /** Called with a concrete path when a result on *this* page is chosen. The
+      panel passes `revealField`, which opens every section above the control
+      and focuses it. */
   onPick(path: string): void;
+  /** Ask the server about every other entry. Injected rather than fetched in
+      here so this file stays testable without a network, and so the one place
+      that knows the content URL stays the one place that knows it.
+
+      Absent means the elsewhere list is simply never drawn — which is what an
+      older kit's panel against a newer site would want, and is also the whole
+      of the feature's off switch. */
+  elsewhere?: (query: string, skip: string | null) => Promise<SiteSearch>;
+  /** Called when a result on another page is chosen: load that entry and
+      reveal that field. The panel points the picker at it, which loads. */
+  onPickElsewhere?: (collection: string, entry: string, path: string) => void;
 }
 
 export interface SearchBox {
   element: HTMLElement;
   /** Point it at the entry now on screen. `null` while one is loading, or
       where one failed to load — a search field over content that is not there
-      would answer "nothing matches" to every word on the owner's own page. */
-  setEntry(entry: { fields: Field[]; values: unknown } | null): void;
+      would answer "nothing matches" to every word on the owner's own page.
+
+      `where` is the picker's own `collection/entry` value, which is what the
+      server is told to skip so it never offers a second route to a field the
+      list above already has. Optional because "which entry is this" is a
+      question a caller can genuinely not have an answer to, and skipping
+      nothing is the honest behaviour then — a duplicated row is a smaller
+      failure than a search that quietly leaves a page out. */
+  setEntry(entry: { fields: Field[]; values: unknown; where?: string } | null): void;
 }
+
+/** How long after the last keystroke the server is asked. Long enough that
+    typing a word is one request rather than six, short enough that it does not
+    read as a stall on top of the ~700ms the request itself costs. */
+const ELSEWHERE_DELAY = 300;
 
 export function searchBox(options: SearchBoxOptions): SearchBox {
   const { strings, lang } = options;
@@ -353,7 +148,33 @@ export function searchBox(options: SearchBoxOptions): SearchBox {
   const list = el("ul", "sk-editor__hits");
   element.append(list);
 
-  let entry: { fields: Field[]; values: unknown } | null = null;
+  /* The second list and its own heading, built once and emptied rather than
+     rebuilt, so the live region below announces a *change* rather than being
+     replaced mid-announcement. */
+  const elsewhereNote = el("p", "sk-editor__searchcount sk-editor__searchelsewhere");
+  elsewhereNote.setAttribute("role", "status");
+  elsewhereNote.setAttribute("aria-live", "polite");
+  element.append(elsewhereNote);
+
+  const elsewhereList = el("ul", "sk-editor__hits sk-editor__hits--elsewhere");
+  elsewhereList.hidden = true;
+  element.append(elsewhereList);
+
+  let entry: { fields: Field[]; values: unknown; where?: string } | null = null;
+
+  /* Which request the answer on the way back belongs to. A search field is the
+     one control where a slow answer to an old question is worse than no answer
+     at all: an owner types "email", waits, types "emails", and the first
+     request lands second and puts the wrong list under their thumb. Every
+     response is checked against this before it draws anything. */
+  let asked = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const clearElsewhere = (): void => {
+    elsewhereNote.textContent = "";
+    elsewhereList.textContent = "";
+    elsewhereList.hidden = true;
+  };
 
   const draw = (): void => {
     list.textContent = "";
@@ -361,6 +182,11 @@ export function searchBox(options: SearchBoxOptions): SearchBox {
     if (!entry || !query.trim()) {
       count.textContent = "";
       list.hidden = true;
+      /* A cleared box cancels the question as well as the answer: the request
+         in flight belongs to a query that no longer exists. */
+      asked++;
+      if (timer !== undefined) clearTimeout(timer);
+      clearElsewhere();
       return;
     }
 
@@ -371,23 +197,76 @@ export function searchBox(options: SearchBoxOptions): SearchBox {
 
     if (!total) {
       count.textContent = strings.searchNothing;
-      return;
+    } else {
+      count.textContent = fill(strings.searchCount, {
+        count: plural(total, strings.searchMatch, strings.searchMatches, digits)
+      });
+      for (const hit of hits) list.append(row(hit, () => options.onPick(hit.path)));
+      /* Said rather than silently dropped: a list that stops at twenty while
+         claiming twenty-three matches is a list that lied about where the other
+         three are. */
+      if (total > hits.length) {
+        list.append(el("li", "sk-editor__hitmore", strings.searchNarrow));
+      }
     }
 
-    count.textContent = fill(strings.searchCount, {
-      count: plural(total, strings.searchMatch, strings.searchMatches, digits)
-    });
-    for (const hit of hits) list.append(row(hit));
-    /* Said rather than silently dropped: a list that stops at twenty while
-       claiming twenty-three matches is a list that lied about where the other
-       three are. */
-    if (total > hits.length) {
-      const more = el("li", "sk-editor__hitmore", strings.searchNarrow);
-      list.append(more);
-    }
+    askElsewhere(query);
   };
 
-  function row(hit: SearchHit): HTMLElement {
+  /** The other pages, debounced, and never in the way of the list above. */
+  function askElsewhere(query: string): void {
+    if (!options.elsewhere || !entry) return;
+    if (timer !== undefined) clearTimeout(timer);
+    const mine = ++asked;
+    /* Said while it is happening rather than after: without this the panel is
+       silent for the whole second the read takes, and a silent second under a
+       list that has already answered reads as "that is all there is". */
+    elsewhereNote.textContent = strings.searchLooking;
+    elsewhereList.textContent = "";
+    elsewhereList.hidden = true;
+
+    const where = entry.where ?? null;
+    timer = setTimeout(() => {
+      void options
+        .elsewhere?.(query, where)
+        .then((found) => {
+          if (mine !== asked) return;
+          drawElsewhere(found);
+        })
+        .catch(() => {
+          if (mine !== asked) return;
+          /* Named, not swallowed. An owner told "nothing on your other pages"
+             when the truth is "we could not look" will stop looking — and the
+             one thing this feature cannot afford is to be quietly wrong about
+             an absence. */
+          elsewhereNote.textContent = strings.searchElsewhereFailed;
+        });
+    }, ELSEWHERE_DELAY);
+  }
+
+  function drawElsewhere(found: SiteSearch): void {
+    if (!found.total) {
+      elsewhereNote.textContent = strings.searchElsewhereNothing;
+      elsewhereList.hidden = true;
+      return;
+    }
+    elsewhereNote.textContent = fill(strings.searchElsewhere, {
+      count: plural(found.total, strings.searchMatch, strings.searchMatches, digits)
+    });
+    elsewhereList.hidden = false;
+    for (const hit of found.hits) {
+      elsewhereList.append(
+        row(hit, () => options.onPickElsewhere?.(hit.collection, hit.entry, hit.path), hit.title)
+      );
+    }
+    if (found.total > found.hits.length) {
+      elsewhereList.append(el("li", "sk-editor__hitmore", strings.searchNarrow));
+    }
+  }
+
+  /** One result. `page` names the entry it is on, and is absent for a hit on
+      the page already open — where saying so on every row would be noise. */
+  function row(hit: SearchHit, pick: () => void, page?: string): HTMLElement {
     const item = el("li", "");
     const button = el("button", "sk-editor__hit");
     button.type = "button";
@@ -398,6 +277,19 @@ export function searchBox(options: SearchBoxOptions): SearchBox {
        is the site's own words, which may be either. */
     const where = el("span", "sk-editor__hitwhere");
     where.setAttribute("dir", "auto");
+    if (page) {
+      /* The page's own name leads and is marked as its own element, because on
+         the elsewhere list it is the thing an owner is scanning for — they know
+         what they wrote, they are asking *where*.
+
+         The separator is a node of its own rather than a margin, and that is
+         not decoration: a browser pass read this row back as
+         "Case studies — Bruce — bezLink" when the field sat at the top level
+         of its entry and so had no section trail to supply the dash. A gap
+         drawn in CSS is not a gap a screen reader reads. */
+      where.append(el("span", "sk-editor__hitpage", page));
+      where.append(el("span", "sk-editor__hittrail", " — "));
+    }
     if (hit.where.length) {
       where.append(el("span", "sk-editor__hittrail", `${hit.where.join(" — ")} — `));
     }
@@ -419,7 +311,7 @@ export function searchBox(options: SearchBoxOptions): SearchBox {
       button.append(snippet);
     }
 
-    button.addEventListener("click", () => options.onPick(hit.path));
+    button.addEventListener("click", pick);
     item.append(button);
     return item;
   }
@@ -439,10 +331,15 @@ export function searchBox(options: SearchBoxOptions): SearchBox {
     /* Enter takes the first result. Typing a word and pressing Enter is what
        every other search field an owner has used does, and without it the only
        way through is a tap on a list that has just this moment redrawn under
-       their thumb. */
+       their thumb.
+
+       The list on *this* page first and the other pages only if it is empty:
+       Enter should never navigate away from the page an owner is on while a
+       match on it is sitting on screen. */
     if (event.key === "Enter") {
       event.preventDefault();
-      list.querySelector<HTMLButtonElement>(".sk-editor__hit")?.click();
+      const here = list.querySelector<HTMLButtonElement>(".sk-editor__hit");
+      (here ?? elsewhereList.querySelector<HTMLButtonElement>(".sk-editor__hit"))?.click();
       return;
     }
     /* Escape empties the box rather than leaving the results standing over a
@@ -462,7 +359,8 @@ export function searchBox(options: SearchBoxOptions): SearchBox {
       /* The query survives an entry change on purpose: an owner fixing the
          same phrase on the English page and then the French one types it once.
          The results are redrawn against the new entry, so nothing on screen is
-         about the old one. */
+         about the old one — and the elsewhere list is re-asked, because the
+         page it must now skip is a different page. */
       draw();
     }
   };

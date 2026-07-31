@@ -29,7 +29,7 @@ import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
 import { noteEditorVerdict } from "./marker.js";
 import { render, Uploads, type RenderContext } from "./render.js";
-import { searchBox, type SearchBox } from "./search.js";
+import { searchBox, type SearchBox, type SiteSearch } from "./search.js";
 import {
   AUTH_RESULT_PARAM,
   BACK_PARAM,
@@ -530,7 +530,37 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     const finder = searchBox({
       strings,
       lang,
-      onPick: (path) => revealField(form, path)
+      onPick: (path) => revealField(form, path),
+      /* The other pages, through the content route the panel already talks to.
+         The fetch lives here rather than in search.ts so that the one place
+         that knows where the content endpoint is stays the one place that
+         knows — and so search.ts is testable without a network. */
+      elsewhere: async (query, skip) => {
+        const response = await fetch(
+          `${content}?search=${encodeURIComponent(query)}` +
+            (skip ? `&skip=${encodeURIComponent(skip)}` : "") +
+            /* The panel's own word for a section's switch, so a search for the
+               word an owner can see finds it on every page and not just this
+               one. The server has no string table. */
+            `&toggle=${encodeURIComponent(strings.sectionShow)}`,
+          { headers: { Accept: "application/json" } }
+        );
+        if (!response.ok) throw new Error(`search: ${response.status}`);
+        const body = (await response.json()) as SiteSearch & { ok?: boolean };
+        if (!body.ok) throw new Error("search: not ok");
+        return body;
+      },
+      /* Going to a field on another page is the picker's own move plus the
+         `#field=` route: point the select at that entry, let `change` load it,
+         and let `wantedField` reveal the control once the fields exist. Both
+         halves already existed — one for the owner choosing a page, one for a
+         link arriving from the site — and this is the first thing to use them
+         together. */
+      onPickElsewhere: (collection, entry, path) => {
+        wantedField = path;
+        select.value = `${collection}/${entry}`;
+        select.dispatchEvent(new Event("change"));
+      }
     });
     element.append(bar, owner.element, picker, finder.element, form, footer);
 
@@ -739,8 +769,10 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     /* The same object the controls write into as they are typed, not a copy —
        so a search run after a change finds the words on screen rather than the
-       ones the file had when the panel opened. */
-    finder.setEntry({ fields: body.fields, values: body.values });
+       ones the file had when the panel opened. `where` is the picker's own
+       value for this page, which is what the server is told to leave out of
+       the other list. */
+    finder.setEntry({ fields: body.fields, values: body.values, where: value });
 
     let sha = body.sha;
     save.addEventListener("click", () => {

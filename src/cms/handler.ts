@@ -4,14 +4,15 @@
    GET  (no params)           the collections and entries this site exposes
    GET  ?home                 the owner's home: traffic, recent changes,
                               whether the last one is live, their review link
+   GET  ?search=              every field on every page matching those words
    POST {collection, entry, edits, sha}   validate, commit, report the commit
    POST {request: {text, page}}           file a content request as an issue
 
-   The last two of those arrived with 7.7 and are here rather than in an
-   endpoint of their own for one reason: a second `api/` file is a second file
-   in every site repo, and the last per-site editor file cost four client-repo
-   commits in an afternoon (SCALE.md §9). A site gains no file for the owner's
-   home.
+   The last three of those arrived with 7.7 and 0.20.0 and are here rather than
+   in endpoints of their own for one reason: a second `api/` file is a second
+   file in every site repo, and the last per-site editor file cost four
+   client-repo commits in an afternoon (SCALE.md §9). A site gains no file for
+   the owner's home and none for search — a version bump is its whole share.
 
    Two rules here are load-bearing:
 
@@ -29,7 +30,6 @@ import { sameHost } from "../feedback/guards.js";
 import { json } from "../feedback/http.js";
 import {
   ConflictError,
-  listEntries,
   readBinary,
   readFile,
   writeFile,
@@ -38,6 +38,8 @@ import {
 import { commitFiles } from "./tree.js";
 import { prepareUploads, resolveUploads, UploadError, type PreparedUpload } from "./uploads.js";
 import { formModel } from "./form.js";
+import { ENTRY, entryIds, entryOf, entryUrl, filePath } from "./entries.js";
+import { createCorpusCache, searchSite } from "./search.js";
 import { imageType, previewPaths } from "./preview.js";
 import { findField, savablePaths, templateOf, valueAt } from "../editor/values.js";
 import type { Field } from "./fields.js";
@@ -53,10 +55,6 @@ export interface ContentHandler {
   POST(request: Request): Promise<Response>;
 }
 
-/* An entry name becomes a file path, so it is checked rather than trusted:
-   anything but a plain name could climb out of the collection's directory. */
-const ENTRY = /^[a-z0-9][a-z0-9._-]*$/i;
-
 /** Where photographs land when a collection hasn't said. Under `public/`,
     because that is where Astro serves static files from and the URL written
     into the content is this path with its first segment removed. */
@@ -66,6 +64,14 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
   const resolveEnv: () => CmsEnv =
     typeof options.env === "function" ? options.env : () => options.env as CmsEnv;
   const userAgent = options.userAgent ?? "sk-cms";
+
+  /* The parsed content of every entry, kept between requests on a warm
+     instance and re-read the moment the branch's head commit sha moves. Built
+     here rather than at module scope because a Worker has no env at module
+     scope — the rule the rate limiter was fixed for — and because a cache that
+     belongs to one handler cannot outlive the configuration it was filled
+     for. It holds no credential; see search.ts. */
+  const corpus = createCorpusCache();
 
   async function GET(request: Request): Promise<Response> {
     const env = resolveEnv();
@@ -95,11 +101,36 @@ export function createContentHandler(options: ContentHandlerOptions): ContentHan
         return withGate(json({ ok: true, who: gate.session?.email, ...home }), gate);
       }
 
+      /* Every page at once, for the search field at the top of the panel.
+         -----------------------------------------------------------------
+         Above the `collection` branch and not below it, because this query
+         carries `collection`/`entry`'s cousin `skip` and must not be read as
+         "load that entry" — the branch order *is* the dispatch here, the same
+         way `?home` and `?preview` are placed. Behind the same gate as every
+         other read: session, allowlist re-checked, and nothing written. */
+      const query = url.searchParams.get("search");
+      if (query !== null) {
+        const found = await searchSite(access, options.collections, query, {
+          /* The picker's own `collection/entry` string for the page already
+             open. Its matches are the panel's instant list; offering them
+             again here would be a second route to a field, one of which
+             reloads the page the owner is already on. */
+          skip: url.searchParams.get("skip") ?? undefined,
+          /* The panel's word for a section's on/off switch. It comes from the
+             client because the string table is the client's and the server has
+             none — one parameter against a second copy of the panel's copy in
+             three languages. It is folded and compared and never stored. */
+          toggleLabel: url.searchParams.get("toggle") ?? undefined,
+          cache: corpus
+        });
+        return withGate(json({ ok: true, who: gate.session?.email, ...found }), gate);
+      }
+
       /* No collection named: the panel is asking what there is to edit. */
       if (!name) {
         const collections = [];
         for (const [key, config] of Object.entries(options.collections)) {
-          const ids = config.dir ? await listEntries(config.dir, access) : [entryOf(config)];
+          const ids = await entryIds(config, access);
           collections.push({
             name: key,
             label: config.label ?? key,
@@ -506,31 +537,10 @@ async function repoAccess(env: CmsEnv, userAgent: string): Promise<RepoAccess> {
 
 /* --- paths and messages ----------------------------------------------- */
 
-function entryOf(config: CollectionConfig): string {
-  return (config.file ?? "").replace(/^.*\//, "").replace(/\.ya?ml$/, "");
-}
-
-function filePath(config: CollectionConfig, entry: string): string {
-  if (config.dir) return `${config.dir.replace(/\/+$/, "")}/${entry}.yaml`;
-  return config.file as string;
-}
-
-/** Where an entry can be seen on the site, so the panel can offer to go and
-    edit it in place. A pattern covers a collection whose URLs are regular
-    (`/projects/{entry}.html`); a map covers one whose aren't.
-
-    Only a site-relative path is ever emitted. This value ends up as an href
-    the owner taps, so an absolute URL here would be a link off the site
-    wearing the editor's clothes — refused rather than trusted, even though
-    the only writer is the site's own config. */
-function entryUrl(config: CollectionConfig, id: string): string | undefined {
-  const raw =
-    typeof config.entryUrl === "string"
-      ? config.entryUrl.replace("{entry}", id)
-      : config.entryUrl?.[id];
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return undefined;
-  return raw;
-}
+/* `entryOf`, `filePath`, `entryUrl` and the `ENTRY` pattern moved to
+   entries.ts in A3.2 — the cross-entry search needs every one of them, and
+   two answers to "which file is entry `about.fr` in" is how one of them comes
+   to be wrong on its own. */
 
 /** Readable in `git log` without opening the diff, and it names the human even
     though the commit is authored by the App. */

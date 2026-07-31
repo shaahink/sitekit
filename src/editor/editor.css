@@ -122,12 +122,15 @@ body {
 
 .sk-editor__picker { margin-block: var(--sk-editor-gap); }
 
-/* Finding a word on this page.
+/* Finding a word.
    ---------------------------------------------------------------------------
-   Under the picker, above the form: it searches the entry the picker chose and
-   nothing else, and where it sits is most of what says so.
+   Under the picker, above the form. **Two lists, and the order is the point:**
+   the entry the picker chose answers on the keystroke and sits first, and the
+   owner's other pages arrive underneath about a second later (A3.2 measured
+   697ms cold, ~250ms warm). Putting the slow half second is what lets the fast
+   half stay instant.
 
-   The list is capped and scrolls rather than growing. Twenty results at full
+   Each list is capped and scrolls rather than growing. Twenty results at full
    height is a phone screen and a half of list between an owner and the form
    they were about to use, which would make the search worse than the scrolling
    it replaces. */
@@ -187,6 +190,21 @@ body {
   color: var(--sk-editor-dim);
 }
 .sk-editor__hittrail { color: var(--sk-editor-muted); }
+
+/* Which page a match is on, and it leads the line on the second list only.
+   An owner scanning that list already knows what they wrote — they are asking
+   *where*, so the page's name is the one part of the row that is not dimmed.
+
+   No margin: the em dash after it is a real node (see search.ts), because a
+   gap drawn in CSS is not a gap a screen reader reads. */
+.sk-editor__hitpage {
+  color: var(--sk-editor-ink);
+  font-weight: 600;
+}
+
+/* The heading over the other pages' results. It sits between two lists, so it
+   needs the space above that the first count line does not. */
+.sk-editor__searchelsewhere { margin-block-start: 0.6rem; }
 
 /* One line with an end-of-line ellipsis. The snippet is already cut to the
    words around the match; this is the guard for a value with no spaces in it,

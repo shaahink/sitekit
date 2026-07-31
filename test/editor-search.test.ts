@@ -24,7 +24,7 @@
    dropping a ZWNJ or Latinising a digit — and the first anyone would know is a
    commit. The last test in this file says so in bytes. */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Field } from "../src/cms/fields.js";
 import {
   entryFields,
@@ -32,7 +32,9 @@ import {
   fold,
   foldQuery,
   searchBox,
-  searchEntry
+  searchEntry,
+  type SiteHit,
+  type SiteSearch
 } from "../src/editor/search.js";
 import { defaultStrings } from "../src/editor/strings.js";
 
@@ -276,6 +278,258 @@ const type = (query: string): void => {
 };
 
 const rows = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>(".sk-editor__hit")];
+
+/* --- the second list, over the owner's other pages ------------------------ */
+
+const elsewhereRows = (): HTMLElement[] => [
+  ...document.querySelectorAll<HTMLElement>(".sk-editor__hits--elsewhere .sk-editor__hit")
+];
+
+const localRows = (): HTMLElement[] => [
+  ...document.querySelectorAll<HTMLElement>(".sk-editor__hits:not(.sk-editor__hits--elsewhere) .sk-editor__hit")
+];
+
+const elsewhereNote = (): string =>
+  document.querySelector<HTMLElement>(".sk-editor__searchelsewhere")?.textContent ?? "";
+
+const siteHit = (over: Partial<SiteHit> = {}): SiteHit => ({
+  path: "contact.email",
+  label: "Email",
+  where: ["Contact"],
+  snippet: {
+    before: "",
+    match: "hello@elfine.example",
+    after: "",
+    cutStart: false,
+    cutEnd: false
+  },
+  collection: "site",
+  entry: "site.fr",
+  title: "Shared — Français",
+  file: "src/content/site/site.fr.yaml",
+  ...over
+});
+
+/* A panel wired to a server that is under the test's control: `answer` is what
+   the next look returns, and `asked` is every question it was given. */
+function boxWithElsewhere(answer: () => Promise<SiteSearch>): {
+  element: HTMLElement;
+  setEntry: (entry: { fields: Field[]; values: unknown; where?: string } | null) => void;
+  onPick: ReturnType<typeof vi.fn>;
+  onPickElsewhere: ReturnType<typeof vi.fn>;
+  asked: Array<[string, string | null]>;
+} {
+  const onPick = vi.fn();
+  const onPickElsewhere = vi.fn();
+  const asked: Array<[string, string | null]> = [];
+  const made = searchBox({
+    strings: defaultStrings,
+    lang: "en",
+    onPick,
+    onPickElsewhere,
+    elsewhere: (query, skip) => {
+      asked.push([query, skip]);
+      return answer();
+    }
+  });
+  document.body.append(made.element);
+  return { ...made, onPick, onPickElsewhere, asked };
+}
+
+const nothingElsewhere = (): Promise<SiteSearch> =>
+  Promise.resolve({ hits: [], total: 0, entries: 3 });
+
+describe("the other pages", () => {
+  beforeEach(() => {
+    document.body.innerHTML = "";
+    vi.useFakeTimers();
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** Let the debounce fire and the promise settle. */
+  async function settle(): Promise<void> {
+    await vi.runAllTimersAsync();
+  }
+
+  it("asks the server once for a word typed in six keystrokes", async () => {
+    const made = boxWithElsewhere(nothingElsewhere);
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    for (const partial of ["e", "em", "ema", "emai", "email"]) type(partial);
+    await settle();
+    /* One question, and it carries the page to leave out — the panel already
+       answers for that one instantly and client-side. */
+    expect(made.asked).toEqual([["email", "site/site.en"]]);
+  });
+
+  it("says it is looking rather than going quiet for a second", async () => {
+    const made = boxWithElsewhere(nothingElsewhere);
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    type("email");
+    expect(elsewhereNote()).toBe(defaultStrings.searchLooking);
+    await settle();
+    expect(elsewhereNote()).toBe(defaultStrings.searchElsewhereNothing);
+  });
+
+  it("names the page each match is on, and how many there are", async () => {
+    const made = boxWithElsewhere(() =>
+      Promise.resolve({ hits: [siteHit(), siteHit({ entry: "site.de", title: "Shared — Deutsch" })], total: 2, entries: 3 })
+    );
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    type("hello@elfine.example");
+    await settle();
+
+    expect(elsewhereNote()).toBe("2 matches on your other pages");
+    const drawn = elsewhereRows();
+    expect(drawn).toHaveLength(2);
+    expect(drawn[0]?.querySelector(".sk-editor__hitpage")?.textContent).toBe("Shared — Français");
+    expect(drawn[0]?.querySelector(".sk-editor__hitmark")?.textContent).toBe("hello@elfine.example");
+  });
+
+  /* Found by reading a real row back out of a browser, not by reading the
+     source: a field at the top level of its entry has no section trail, so
+     nothing supplied the dash and the line read "Case studies — Bruce —
+     bezLink". The gap was there — it was a CSS margin, and a margin is not
+     something a screen reader reads. */
+  it("separates the page's name from what follows with a character, not a margin", async () => {
+    const made = boxWithElsewhere(() =>
+      /* `where: []` is the case: a field sitting at the top level of its entry. */
+      Promise.resolve({ hits: [siteHit({ where: [], label: "Link" })], total: 1, entries: 3 })
+    );
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    type("hello@elfine.example");
+    await settle();
+
+    const line = elsewhereRows()[0]?.querySelector(".sk-editor__hitwhere")?.textContent ?? "";
+    expect(line).toBe("Shared — Français — Link");
+    expect(line).not.toContain("FrançaisLink");
+  });
+
+  it("hands back the collection, the entry and the path when one is chosen", async () => {
+    const made = boxWithElsewhere(() =>
+      Promise.resolve({ hits: [siteHit()], total: 1, entries: 3 })
+    );
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    type("hello@elfine.example");
+    await settle();
+    elsewhereRows()[0]?.click();
+    expect(made.onPickElsewhere).toHaveBeenCalledWith("site", "site.fr", "contact.email");
+    /* And not the other one: a match on another page is not a field on this
+       one, and revealing a path this form does not have would do nothing while
+       looking like it worked. */
+    expect(made.onPick).not.toHaveBeenCalled();
+  });
+
+  /* A search field is the one control where a slow answer to an old question
+     is worse than no answer: an owner types "email", waits, types "emails",
+     and the first request lands second under their thumb. */
+  it("ignores an answer to a question that has been replaced", async () => {
+    let resolveFirst: ((found: SiteSearch) => void) | undefined;
+    let call = 0;
+    const made = boxWithElsewhere(() => {
+      call++;
+      if (call === 1) return new Promise<SiteSearch>((resolve) => (resolveFirst = resolve));
+      return Promise.resolve({ hits: [siteHit({ title: "The second answer" })], total: 1, entries: 3 });
+    });
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+
+    type("email");
+    await vi.advanceTimersByTimeAsync(400);
+    type("emails");
+    await settle();
+
+    /* The second answer is on screen. Now the first one arrives, late. */
+    resolveFirst?.({ hits: [siteHit({ title: "The stale answer" })], total: 9, entries: 3 });
+    await vi.runAllTimersAsync();
+
+    expect(elsewhereNote()).toBe("1 match on your other pages");
+    expect(elsewhereRows()[0]?.querySelector(".sk-editor__hitpage")?.textContent).toBe(
+      "The second answer"
+    );
+  });
+
+  /* Being quietly wrong about an absence is the one thing this cannot afford.
+     An owner told "nothing on your other pages" when the truth is "we could
+     not look" stops looking. */
+  it("says it could not look, rather than saying there was nothing", async () => {
+    const made = boxWithElsewhere(() => Promise.reject(new Error("502")));
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    type("email");
+    await settle();
+    expect(elsewhereNote()).toBe(defaultStrings.searchElsewhereFailed);
+    expect(elsewhereNote()).not.toBe(defaultStrings.searchElsewhereNothing);
+  });
+
+  it("clears the second list and cancels the question when the box is emptied", async () => {
+    const made = boxWithElsewhere(() =>
+      Promise.resolve({ hits: [siteHit()], total: 1, entries: 3 })
+    );
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    type("hello@elfine.example");
+    await settle();
+    expect(elsewhereRows()).toHaveLength(1);
+
+    type("");
+    await settle();
+    expect(elsewhereRows()).toHaveLength(0);
+    expect(elsewhereNote()).toBe("");
+    /* And nothing further was asked on the way out. */
+    expect(made.asked).toHaveLength(1);
+  });
+
+  it("re-asks when the picker moves to another page, because the page to skip changed", async () => {
+    const made = boxWithElsewhere(nothingElsewhere);
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+    type("email");
+    await settle();
+    made.setEntry({ fields: model, values: values(), where: "site/site.fr" });
+    await settle();
+    expect(made.asked).toEqual([
+      ["email", "site/site.en"],
+      ["email", "site/site.fr"]
+    ]);
+  });
+
+  /* Enter must never navigate away from the page an owner is on while a match
+     on it is sitting on screen. */
+  it("gives Enter the match on this page first, and the other pages only if there is none", async () => {
+    const made = boxWithElsewhere(() =>
+      Promise.resolve({ hits: [siteHit()], total: 1, entries: 3 })
+    );
+    made.setEntry({ fields: model, values: values(), where: "site/site.en" });
+
+    type("Tagline");
+    await settle();
+    expect(localRows().length).toBeGreaterThan(0);
+    expect(elsewhereRows()).toHaveLength(1);
+    field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(made.onPick).toHaveBeenCalled();
+    expect(made.onPickElsewhere).not.toHaveBeenCalled();
+
+    made.onPick.mockClear();
+    /* A word this entry does not have — the fixture's own contact block
+       carries `hello@elfine.example`, which is the point of the fixture and
+       would have matched here too. */
+    type("Les heures d'ouverture");
+    await settle();
+    expect(localRows()).toHaveLength(0);
+    expect(elsewhereRows()).toHaveLength(1);
+    field().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(made.onPickElsewhere).toHaveBeenCalled();
+    expect(made.onPick).not.toHaveBeenCalled();
+  });
+
+  /* A panel with no way to ask is a panel that draws one list — which is what
+     an older site against a newer kit would want, and is the feature's whole
+     off switch. */
+  it("draws nothing about other pages when it was given no way to look", () => {
+    document.body.innerHTML = "";
+    const made = box();
+    made.setEntry({ fields: model, values: values() });
+    type("email");
+    expect(elsewhereNote()).toBe("");
+    expect(elsewhereRows()).toHaveLength(0);
+  });
+});
 
 describe("the search field in the panel", () => {
   it("is not on the page until an entry is", () => {

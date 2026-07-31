@@ -68,24 +68,45 @@ export interface EditorStrings {
       typed. Warned rather than discovered. */
   signInLapsedAway: string;
 
-  /* --- finding a word on this page (0.20.0, session 21 §A3) -------------- */
+  /* --- finding a word (0.20.0, session 21 §A3) ---------------------------- */
 
-  /** The search field's own label. It says *this page* rather than "search",
-      because what it does and does not reach is the thing an owner has to know
-      before they trust the answer: everything on the entry in front of them,
-      and nothing on the other twenty. */
+  /** The search field's own label. A3.1 said *this page*, because that was
+      honestly all it reached; A3.2 gave it the other twenty, so it says the
+      site. What a search reaches is the thing an owner has to know before they
+      trust its answer, which is why this label has ever mentioned scope at
+      all. */
   searchLabel: string;
   /** `{count}` — already pluralised and already in the panel's own digits. */
   searchCount: string;
   searchMatch: string;
   searchMatches: string;
-  /** No match. Said plainly: an empty list under a field an owner has just
-      typed into reads as a fault in the editor rather than an answer. */
+  /** No match on the page in front of them. Said plainly: an empty list under
+      a field an owner has just typed into reads as a fault in the editor
+      rather than an answer. */
   searchNothing: string;
   /** Under a list that stopped at its cap. A list of twenty claiming
       twenty-three matches has hidden three of them and said nothing, which is
       the one thing a search must not do. */
   searchNarrow: string;
+
+  /* The other pages. A separate list under the first one, because it arrives
+     about a second later — measured: 697ms cold, ~250ms on a warm instance —
+     and nothing that slow may sit in front of the half that is instant. */
+
+  /** While the server is being asked. Without it the panel goes quiet for a
+      second under a list that has already answered, which reads as "that is
+      all there is". */
+  searchLooking: string;
+  /** `{count}` on the owner's other pages. */
+  searchElsewhere: string;
+  /** Nothing anywhere else. Distinct from `searchNothing` so the two lists
+      each answer for themselves. */
+  searchElsewhereNothing: string;
+  /** The look failed. Named rather than swallowed: an owner told "nothing on
+      your other pages" when the truth is "we could not look" stops looking,
+      and being quietly wrong about an absence is the one thing this feature
+      cannot afford. */
+  searchElsewhereFailed: string;
 
   /** The collection picker's label. */
   editing: string;
@@ -406,12 +427,16 @@ export const defaultStrings: EditorStrings = {
   signInLapsedAway:
     "Signing in again means leaving this page. Copy anything you've typed before you go.",
 
-  searchLabel: "Find a word on this page",
+  searchLabel: "Find a word anywhere on your site",
   searchCount: "{count} on this page",
   searchMatch: "match",
   searchMatches: "matches",
   searchNothing: "Nothing on this page has those words in it.",
   searchNarrow: "Type a bit more to narrow this down.",
+  searchLooking: "Looking through your other pages…",
+  searchElsewhere: "{count} on your other pages",
+  searchElsewhereNothing: "Nothing on your other pages either.",
+  searchElsewhereFailed: "Couldn't look through your other pages just now.",
 
   editing: "Editing",
   editingFile: "Editing {path}",
@@ -636,12 +661,16 @@ const fr: EditorStrings = {
   /* «trouvé» would have to agree with whatever `{count}` turns out to be, and
      this table avoids that everywhere for the reason its header gives — so the
      count is placed rather than qualified. */
-  searchLabel: "Chercher un mot sur cette page",
+  searchLabel: "Chercher un mot partout sur votre site",
   searchCount: "{count} sur cette page",
   searchMatch: "résultat",
   searchMatches: "résultats",
   searchNothing: "Rien sur cette page ne contient ces mots.",
   searchNarrow: "Écrivez encore un peu pour affiner.",
+  searchLooking: "Recherche sur vos autres pages…",
+  searchElsewhere: "{count} sur vos autres pages",
+  searchElsewhereNothing: "Rien non plus sur vos autres pages.",
+  searchElsewhereFailed: "Impossible de chercher sur vos autres pages pour le moment.",
 
   editing: "Vous modifiez",
   editingFile: "Vous modifiez {path}",
@@ -851,12 +880,16 @@ const fa: EditorStrings = {
   /* `searchMatch` and `searchMatches` are the same word for the same reason
      `change` and `changes` are: Persian does not pluralise a noun after a
      numeral, so «۳ مورد» is what a Persian reader expects. */
-  searchLabel: "دنبال کلمه‌ای در این صفحه بگرد",
+  searchLabel: "دنبال کلمه‌ای در هر جای سایتت بگرد",
   searchCount: "{count} در این صفحه",
   searchMatch: "مورد",
   searchMatches: "مورد",
   searchNothing: "هیچ‌چیزی در این صفحه این کلمه‌ها را ندارد.",
   searchNarrow: "کمی بیشتر بنویس تا نتیجه‌ها کمتر شوند.",
+  searchLooking: "در صفحه‌های دیگرت هم می‌گردم…",
+  searchElsewhere: "{count} در صفحه‌های دیگرت",
+  searchElsewhereNothing: "در صفحه‌های دیگرت هم چیزی نبود.",
+  searchElsewhereFailed: "الان نتوانستم در صفحه‌های دیگرت بگردم.",
 
   editing: "در حال ویرایش",
   editingFile: "در حال ویرایش {path}",

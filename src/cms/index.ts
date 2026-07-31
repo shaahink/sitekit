@@ -32,6 +32,15 @@ export {
   type SessionOptions
 } from "./session.js";
 export { allows } from "./allowlist.js";
+export {
+  searchSite,
+  createCorpusCache,
+  type CorpusCache,
+  type SearchSiteOptions,
+  type SiteHit,
+  type SiteSearch
+} from "./search.js";
+export { entryIds, entryOf, entryTitle, entryUrl, filePath, ENTRY } from "./entries.js";
 export { formModel, type FormModelOptions } from "./form.js";
 export type { BooleanField, Field, FieldCommon, ScalarField, SelectOption } from "./fields.js";
 export { isVisible, visibleOnly, hiddenSections, VISIBLE } from "./visibility.js";

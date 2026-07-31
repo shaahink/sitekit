@@ -64,6 +64,9 @@ beforeEach(async () => {
       stored = { text: Buffer.from(body.content, "base64").toString("utf8"), sha: "sha-next" };
       return jsonResponse({ content: { sha: "sha-next" }, commit: { html_url: "https://gh/c/1" } });
     }
+    /* What the cross-entry search asks before it reads anything: has the
+       branch moved since the corpus was built. */
+    if (path.endsWith("/commits")) return jsonResponse([{ sha: "commit-one" }]);
     if (path.endsWith("/src/content/works")) {
       return jsonResponse([
         { type: "file", name: "wordless.yaml" },
@@ -329,6 +332,70 @@ describe("GET", () => {
       get("?collection=works&entry=..%2F..%2Fsecrets", { cookie: await cookie() })
     );
     expect(response.status).toBe(400);
+  });
+});
+
+/* The route, not the search — searchSite's own behaviour is cms-search.test.ts.
+   What this asserts is that it is *on this endpoint*, behind *this gate*, and
+   that it did not eat the branch below it. A site gains no `api/` file for
+   this feature, which is the whole reason it is a query on a route that
+   already exists. */
+describe("GET ?search", () => {
+  it("searches every entry of every collection", async () => {
+    const response = await handler.GET(get("?search=interdisciplinary", { cookie: await cookie() }));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    /* home, plus the two entries of the works directory — all three answer
+       from the same fixture here. */
+    expect(body.entries).toBe(3);
+    expect(body.total).toBe(3);
+    expect(body.hits[0].path).toBe("hero.tagline");
+    expect(body.hits[0].collection).toBeTruthy();
+  });
+
+  it("leaves out the entry the panel already has open", async () => {
+    const response = await handler.GET(
+      get("?search=interdisciplinary&skip=works/wordless", { cookie: await cookie() })
+    );
+    const body = await response.json();
+    expect(body.total).toBe(2);
+    expect(body.hits.some((hit: { entry: string }) => hit.entry === "wordless")).toBe(false);
+  });
+
+  it("is behind the same gate as every other read", async () => {
+    const response = await handler.GET(get("?search=interdisciplinary"));
+    expect(response.status).toBe(401);
+  });
+
+  it("is refused for an account that is not on the allowlist", async () => {
+    const response = await handler.GET(
+      get("?search=interdisciplinary", { cookie: await cookie("someone@else.com") })
+    );
+    expect(response.status).toBe(403);
+  });
+
+  /* The branch sits above `?collection=`, so an empty search must not fall
+     through into "load an entry" — and `?search=` with a collection named must
+     still be a search. Both directions, because the dispatch here *is* the
+     order of the branches. */
+  it("answers a blank query as a search rather than as an entry load", async () => {
+    const response = await handler.GET(get("?search=", { cookie: await cookie() }));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(0);
+    expect(body.fields).toBeUndefined();
+    expect(body.sha).toBeUndefined();
+  });
+
+  it("does not disturb the entry-loading branch below it", async () => {
+    const body = await (await handler.GET(get("?collection=home", { cookie: await cookie() }))).json();
+    expect(body.sha).toBe("sha-original");
+    expect(body.hits).toBeUndefined();
+  });
+
+  it("writes nothing", async () => {
+    await handler.GET(get("?search=interdisciplinary", { cookie: await cookie() }));
+    expect(puts).toEqual([]);
   });
 });
 
