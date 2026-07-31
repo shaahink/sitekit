@@ -16,5 +16,11 @@
     "lib": ["ES2023"],
     "types": ["node"]
   },
-  "include": ["src/astro"]
+  /* ⚠ Nothing under src/astro may import `../app/index.js`. That barrel
+     re-exports the passkey and PWA clients, which reach for `navigator` and
+     `document`, and this config declares no DOM lib precisely so that a
+     build-time file reaching for a browser API fails here instead of at a
+     site's build. Import `../app/passkey.js` and friends nowhere in this
+     directory; the manifest and worker generators live here for that reason. */
+  "include": ["src/astro", "src/version.ts"]
 }

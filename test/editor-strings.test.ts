@@ -60,7 +60,10 @@ const NOT_LANGUAGE: (keyof EditorStrings)[] = [
    French coincidence. Anything added here needs to be a real word in that
    language, checked, not a string somebody has not got to yet. */
 const SAME_WORD: Record<string, (keyof EditorStrings)[]> = {
-  fr: ["page", "pages"]
+  /* "Version" is the French word for version. Listed rather than reworded:
+     the check exists to catch a key somebody forgot, and an allowlist entry is
+     the honest way to say "checked, and it really is the same word". */
+  fr: ["page", "pages", "versionLabel"]
 };
 
 /* Every `{placeholder}` the English table uses, by key: a translation that

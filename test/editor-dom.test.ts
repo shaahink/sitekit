@@ -294,8 +294,30 @@ describe("the string tables reach both entry points", () => {
 
     expect(document.documentElement.lang).toBe("fa");
     expect(document.documentElement.dir).toBe("rtl");
-    expect(root.textContent).toContain(FA.signOut);
+    /* `accountOpen` rather than `signOut`, since 0.23.0: signing out moved
+       into the settings sheet, and the sheet's rows are not built until it is
+       opened. The claim this line is making is "the panel's chrome is in
+       Farsi", so it has to name a word the chrome actually shows. */
+    expect(root.textContent).toContain(FA.accountOpen);
     expect(root.querySelector(".sk-editor__save")?.textContent).toBe(FA.save);
+  });
+
+  it("puts signing out inside the settings sheet, in Farsi too", async () => {
+    stubFetch(panelRoutes());
+    const root = await panel({ lang: "fa" });
+
+    /* The sheet is in the document from the start but empty until opened —
+       painting it eagerly would mean a passkey round trip on every load of
+       every editor, for a screen most readers never open. */
+    const sheet = root.querySelector<HTMLElement>(".sk-editor__sheet");
+    expect(sheet?.hidden).toBe(true);
+    expect(sheet?.textContent).not.toContain(FA.signOut);
+
+    root.querySelector<HTMLButtonElement>(".sk-editor__account")?.click();
+    /* `paint()` is async — it asks the ladder before drawing — so the rows
+       arrive a microtask later. */
+    await vi.waitFor(() => expect(sheet?.textContent).toContain(FA.signOut));
+    expect(sheet?.hidden).toBe(false);
   });
 });
 

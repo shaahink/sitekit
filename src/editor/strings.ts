@@ -448,6 +448,66 @@ export interface EditorStrings {
   homeRequestSeeIt: string;
   homeRequestFailed: string;
 
+  /* --- settings, the app, and this device (0.23.0) ----------------------- */
+
+  /** The bar's one new control. It replaces "Sign out" there rather than
+      joining it: session 17 measured this bar taking a quarter of a phone
+      screen, and the way to add six things to it is to add one. */
+  accountOpen: string;
+  accountTitle: string;
+  accountClose: string;
+  /** `{who}`. */
+  accountWho: string;
+
+  deviceTitle: string;
+  /** A laptop with no sensor. Said rather than left blank, because a missing
+      row and a broken row look identical. */
+  deviceUnsupported: string;
+  deviceOffer: string;
+  deviceEnrol: string;
+  deviceEnrolled: string;
+  deviceReady: string;
+  deviceForget: string;
+  deviceForgotten: string;
+
+  /** The sign-in screen's button, and the sentence shown instead of it when
+      this device could do it but nobody has signed in yet. That sentence is
+      the reason this whole group exists: it is what should have been on screen
+      the day somebody pressed a dead button and told us nothing happened. */
+  deviceUnlock: string;
+  deviceNeedsSession: string;
+
+  /* Every refusal `app/passkey.ts` can return, except `cancelled`, which is
+     the reader's own decision and gets no message at all. */
+  deviceFailedNotConfigured: string;
+  deviceFailedUnauthorized: string;
+  deviceFailedNotEnrolled: string;
+  deviceFailedRefused: string;
+  deviceFailedTooOld: string;
+  deviceFailedUnverified: string;
+  deviceFailedRevoked: string;
+  deviceFailedOffline: string;
+  deviceFailedUnknown: string;
+
+  installTitle: string;
+  installNote: string;
+  installButton: string;
+  installDone: string;
+  /** Safari has no install API and never will, so the only honest thing to
+      show an iPhone is where its own button is. */
+  installIos: string;
+  installLater: string;
+
+  languageTitle: string;
+
+  helpTitle: string;
+  helpTour: string;
+  helpAsk: string;
+
+  /** `{version}`. Which release an owner is looking at, because "the save
+      button did nothing" is unanswerable without it. */
+  versionLabel: string;
+
   cancel: string;
   visitor: string;
   visitors: string;
@@ -699,6 +759,48 @@ export const defaultStrings: EditorStrings = {
   homeRequestSeeIt: "Follow it here",
   homeRequestFailed: "Couldn't send that just now. Your words are still here — try again in a moment.",
 
+  accountOpen: "Settings",
+  accountTitle: "Settings",
+  accountClose: "Close",
+  accountWho: "Signed in as {who}",
+
+  deviceTitle: "This device",
+  deviceUnsupported: "This browser has no fingerprint or face unlock to offer.",
+  deviceOffer: "Set this up and you can skip the Google step on this device.",
+  deviceEnrol: "Set up quick unlock",
+  deviceEnrolled: "Done. Next time, this device is enough.",
+  deviceReady: "This device can open your editor without going through Google.",
+  deviceForget: "Forget this device",
+  deviceForgotten: "Forgotten. This device will ask for Google again.",
+
+  deviceUnlock: "Unlock with this device",
+  deviceNeedsSession: "Sign in once below, and this device can remember you next time.",
+
+  deviceFailedNotConfigured: "This site isn't set up for that yet.",
+  deviceFailedUnauthorized: "Your sign-in has expired. Sign in again first.",
+  deviceFailedNotEnrolled: "This device isn't set up for that yet.",
+  deviceFailedRefused: "This device wouldn't do it. Check that fingerprint or face unlock is switched on.",
+  deviceFailedTooOld: "This browser is too old for that.",
+  deviceFailedUnverified: "That didn't unlock. Try Google instead.",
+  deviceFailedRevoked: "That account can no longer edit this site.",
+  deviceFailedOffline: "No connection. Try again when you're back online.",
+  deviceFailedUnknown: "That didn't work. Try Google instead.",
+
+  installTitle: "Install",
+  installNote: "Add the editor to your home screen and open it like an app.",
+  installButton: "Add to home screen",
+  installDone: "Installed — you're using it now.",
+  installIos: "Tap the share button in Safari, then “Add to Home Screen”.",
+  installLater: "Your browser will offer this once you've opened the editor a few times.",
+
+  languageTitle: "Language",
+
+  helpTitle: "Help",
+  helpTour: "Show me around again",
+  helpAsk: "Ask for a change",
+
+  versionLabel: "Version {version}",
+
   cancel: "Cancel",
   visitor: "visitor",
   visitors: "visitors",
@@ -931,6 +1033,51 @@ const fr: EditorStrings = {
   homeRequestFailed:
     "Impossible d’envoyer pour le moment. Vos mots sont toujours là — réessayez dans un instant.",
 
+  accountOpen: "Réglages",
+  accountTitle: "Réglages",
+  accountClose: "Fermer",
+  /* "Compte :" plutôt que "Connecté(e) en tant que" — le kit sert plusieurs
+     sites et ne sait rien de la personne qui lit, et une parenthèse de genre
+     dans une interface est un aveu d'ignorance. */
+  accountWho: "Compte : {who}",
+
+  deviceTitle: "Cet appareil",
+  deviceUnsupported: "Ce navigateur n'a ni empreinte ni reconnaissance faciale à proposer.",
+  deviceOffer: "Configurez-le et vous pourrez sauter l'étape Google sur cet appareil.",
+  deviceEnrol: "Configurer le déverrouillage rapide",
+  deviceEnrolled: "C'est fait. La prochaine fois, cet appareil suffira.",
+  deviceReady: "Cet appareil peut ouvrir votre éditeur sans passer par Google.",
+  deviceForget: "Oublier cet appareil",
+  deviceForgotten: "Oublié. Cet appareil redemandera Google.",
+
+  deviceUnlock: "Déverrouiller avec cet appareil",
+  deviceNeedsSession: "Connectez-vous une fois ci-dessous, et cet appareil pourra se souvenir de vous.",
+
+  deviceFailedNotConfigured: "Ce site n'est pas encore configuré pour cela.",
+  deviceFailedUnauthorized: "Votre session a expiré. Reconnectez-vous d'abord.",
+  deviceFailedNotEnrolled: "Cet appareil n'est pas encore configuré pour cela.",
+  deviceFailedRefused: "Cet appareil a refusé. Vérifiez que l'empreinte ou la reconnaissance faciale est activée.",
+  deviceFailedTooOld: "Ce navigateur est trop ancien pour cela.",
+  deviceFailedUnverified: "Le déverrouillage a échoué. Essayez plutôt Google.",
+  deviceFailedRevoked: "Ce compte ne peut plus modifier ce site.",
+  deviceFailedOffline: "Pas de connexion. Réessayez une fois de retour en ligne.",
+  deviceFailedUnknown: "Cela n'a pas fonctionné. Essayez plutôt Google.",
+
+  installTitle: "Installer",
+  installNote: "Ajoutez l'éditeur à votre écran d'accueil et ouvrez-le comme une application.",
+  installButton: "Ajouter à l'écran d'accueil",
+  installDone: "Installé — vous l'utilisez en ce moment.",
+  installIos: "Touchez le bouton Partager dans Safari, puis « Sur l'écran d'accueil ».",
+  installLater: "Votre navigateur vous le proposera après quelques visites.",
+
+  languageTitle: "Langue",
+
+  helpTitle: "Aide",
+  helpTour: "Revoir la visite guidée",
+  helpAsk: "Demander un changement",
+
+  versionLabel: "Version {version}",
+
   cancel: "Annuler",
   visitor: "visiteur",
   visitors: "visiteurs",
@@ -1160,6 +1307,48 @@ const fa: EditorStrings = {
   homeRequestSeeIt: "از همین‌جا دنبالش کن",
   homeRequestFailed: "الان فرستاده نشد. نوشته‌هایت همین‌جاست — کمی بعد دوباره امتحان کن.",
 
+  accountOpen: "تنظیمات",
+  accountTitle: "تنظیمات",
+  accountClose: "بستن",
+  accountWho: "حساب: {who}",
+
+  deviceTitle: "این دستگاه",
+  deviceUnsupported: "این مرورگر اثر انگشت یا تشخیص چهره ندارد.",
+  deviceOffer: "این را تنظیم کن تا دفعهٔ بعد لازم نباشد از گوگل رد شوی.",
+  deviceEnrol: "تنظیم باز کردن سریع",
+  deviceEnrolled: "انجام شد. دفعهٔ بعد همین دستگاه کافی است.",
+  deviceReady: "این دستگاه می‌تواند ویرایشگر را بدون گوگل باز کند.",
+  deviceForget: "این دستگاه را فراموش کن",
+  deviceForgotten: "فراموش شد. این دستگاه دوباره سراغ گوگل می‌رود.",
+
+  deviceUnlock: "باز کردن با این دستگاه",
+  deviceNeedsSession: "یک بار از پایین وارد شو تا این دستگاه دفعهٔ بعد تو را به یاد بیاورد.",
+
+  deviceFailedNotConfigured: "این سایت هنوز برای این کار آماده نیست.",
+  deviceFailedUnauthorized: "ورودت منقضی شده. اول دوباره وارد شو.",
+  deviceFailedNotEnrolled: "این دستگاه هنوز برای این کار تنظیم نشده.",
+  deviceFailedRefused: "دستگاه قبول نکرد. ببین اثر انگشت یا تشخیص چهره روشن است.",
+  deviceFailedTooOld: "این مرورگر برای این کار خیلی قدیمی است.",
+  deviceFailedUnverified: "باز نشد. با گوگل امتحان کن.",
+  deviceFailedRevoked: "این حساب دیگر اجازهٔ ویرایش این سایت را ندارد.",
+  deviceFailedOffline: "اینترنت وصل نیست. وقتی برگشتی دوباره امتحان کن.",
+  deviceFailedUnknown: "نشد. با گوگل امتحان کن.",
+
+  installTitle: "نصب",
+  installNote: "ویرایشگر را به صفحهٔ اصلی اضافه کن و مثل یک برنامه بازش کن.",
+  installButton: "افزودن به صفحهٔ اصلی",
+  installDone: "نصب شده — همین حالا داری از آن استفاده می‌کنی.",
+  installIos: "دکمهٔ اشتراک‌گذاری را در سفاری بزن و بعد «افزودن به صفحهٔ اصلی» را انتخاب کن.",
+  installLater: "مرورگرت بعد از چند بار باز کردن، خودش پیشنهاد می‌دهد.",
+
+  languageTitle: "زبان",
+
+  helpTitle: "راهنما",
+  helpTour: "دوباره راهنما را نشانم بده",
+  helpAsk: "درخواست تغییر",
+
+  versionLabel: "نسخهٔ {version}",
+
   cancel: "بی‌خیال",
   visitor: "بازدیدکننده",
   visitors: "بازدیدکننده",
@@ -1174,6 +1363,21 @@ const fa: EditorStrings = {
     same three the widget ships, and for the same reason: these are the
     languages the fleet's owners actually read. */
 export const editorLocales: Record<string, EditorStrings> = { en: defaultStrings, fr, fa };
+
+/** What the language switcher offers, each language named in its own script.
+
+    Deliberately not translated and deliberately not derived from `Intl`: a
+    reader hunting for their own language is scanning for the word *they* call
+    it, and "Persian" in an English list helps nobody who reads only Persian.
+    Three entries because the kit ships three tables — a site that overrides
+    the tables into a fourth language is pinning `lang` anyway, and a switcher
+    offering a language the kit has no words for would be the same broken
+    promise this release is about. */
+export const PANEL_LANGUAGES: { code: string; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "fr", label: "Français" },
+  { code: "fa", label: "فارسی" }
+];
 
 /** The primary subtag, lowercased: `fa-IR` and `FA` both give `fa`. */
 function primary(lang: string | null | undefined): string {

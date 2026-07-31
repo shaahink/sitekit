@@ -68,10 +68,13 @@ export {
 } from "./placeholders.js";
 export type { PlaceholderCheckOptions, PlaceholderProblem } from "./placeholders.js";
 
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { KIT_VERSION } from "../version.js";
+import { editorManifest, type ManifestIcon } from "./manifest.js";
 import { settleStylePolicy } from "./style-policy.js";
+import { serviceWorkerSource } from "./worker.js";
 
 /* Astro is a peer, not a dependency: the kit is installed by six sites that
    all have their own copy, and pulling a second one in to typecheck four
@@ -116,7 +119,38 @@ export interface EditorRouteOptions {
   /** Where the route is served. Defaults to "/edit", which the site's
       build.format turns into /edit.html or /edit as it already does. */
   pattern?: string;
+  /** Installing the editor to a home screen. Present by default, because the
+      whole point of 0.23.0 is that an owner should not have to be given it
+      site by site; pass `false` to leave a site out. */
+  app?: EditorAppOptions | false;
 }
+
+/** What an installed editor is called and how it looks before it has painted.
+    Every field is optional and every default is derived from something the
+    site already declares, so a site that says nothing still gets an installable
+    editor — which is the difference between a feature the fleet has and a
+    feature six repos would have had to opt into one at a time. */
+export interface EditorAppOptions {
+  /** The full name under the icon. Defaults to the route's `title`. */
+  name?: string;
+  /** The truncated one. Home screens cut hard at about twelve characters. */
+  shortName?: string;
+  themeColor?: string;
+  backgroundColor?: string;
+  /** Overrides the site's own icon. Rarely wanted: the default is whatever
+      `publicDir` already ships, which is the icon the owner recognises. */
+  icons?: ManifestIcon[];
+  description?: string;
+}
+
+/* Deliberately not `/manifest.webmanifest` and not `/sw.js`. The studio's own
+   repo already serves both of those names for the fleet console, and it is
+   also a site in this fleet — so the unprefixed names would have collided on
+   exactly one of the seven repos, which is the sort of thing that is found
+   late and in production. Prefixed, they cannot collide with anything a site
+   has, and they say who put them there. */
+const MANIFEST_PATH = "/sk-editor.webmanifest";
+const WORKER_PATH = "/sk-editor-sw.js";
 
 /** What the injected page imports. Kept in one place so the page and the
     virtual module cannot disagree about the shape. */
@@ -128,6 +162,19 @@ export interface EditorRouteConfig {
   /** The icon this site actually ships, or null where it ships none of the ones
       worth guessing at. See `siteIcon`. */
   icon: { href: string; type: string } | null;
+  /** Where the manifest answers, or null on a site that opted out. The page
+      links it only when it exists, so opting out removes the link rather than
+      leaving one that 404s. */
+  manifestPath: string | null;
+  /** The worker to register, or null. Passed through to the page so the
+      client never has to know this file's name — a constant duplicated into a
+      bundle is a constant that can disagree with the file it names. */
+  workerPath: string | null;
+  /** Painted by the browser around the app before any CSS has loaded. */
+  themeColor: string;
+  /** This release, shown in the account sheet. See ../version.ts for why it is
+      a constant with a test rather than a build-time read. */
+  version: string;
 }
 
 /* Which icon a site ships, read off the site rather than assumed.
@@ -184,20 +231,36 @@ function declaresStyleAttr(config: ResolvedConfig): boolean {
 }
 
 export function editorRoute(options: EditorRouteOptions) {
+  const app = options.app === false ? null : (options.app ?? {});
+  const editorPath = options.pattern ?? "/edit";
+
+  /* Filled in by config:setup and read by build:done. Which icon a site ships
+     cannot be known until Astro has resolved `publicDir`, and the manifest
+     that names it is not written until the build is over, so the one value has
+     to survive between two hooks. A field on the closure rather than a second
+     call to `siteIcon`, because reading the disk twice and getting two answers
+     is a bug that would only ever appear on a machine where it mattered. */
+  let icon: EditorRouteConfig["icon"] = null;
+
   return {
     name: "@shaahink/sitekit:editor-route",
     hooks: {
       "astro:config:setup": ({ config, injectRoute, updateConfig }: SetupHook) => {
+        icon = siteIcon(config.publicDir);
         const resolved: EditorRouteConfig = {
           title: options.title,
           needsStyleAttr: !declaresStyleAttr(config),
-          icon: siteIcon(config.publicDir)
+          icon,
+          manifestPath: app ? MANIFEST_PATH : null,
+          workerPath: app ? WORKER_PATH : null,
+          themeColor: app?.themeColor ?? "#ffffff",
+          version: KIT_VERSION
         };
 
         /* The page is a published .astro file; the site's own build compiles
            it, which is why it ships as source rather than through tsc. */
         injectRoute({
-          pattern: options.pattern ?? "/edit",
+          pattern: editorPath,
           entrypoint: "@shaahink/sitekit/astro/edit.astro",
           prerender: true
         });
@@ -222,9 +285,86 @@ export function editorRoute(options: EditorRouteOptions) {
          the config is being read, because it depends on hashes the build has
          not computed yet. See style-policy.ts — measured fleet-wide before
          writing it, and five of the six sites needed it. */
+      /* Two things that cannot be decided while the config is being read.
+
+         The style policy depends on hashes the build has not computed yet —
+         see style-policy.ts, measured fleet-wide before writing it, and five
+         of the six sites needed it.
+
+         The manifest and the worker are written here rather than injected as
+         routes because they are static text that depends only on the config,
+         and an injected route would have meant two more published entry
+         points, two more export map lines, and an endpoint file compiled by
+         each site's build to return a constant. Writing them into the built
+         output is the whole of what a route would have achieved. */
       "astro:build:done": ({ dir, logger }: BuildDoneHook) => {
         settleStylePolicy(dir, logger);
+        if (app) emitApp(dir, logger, options, app, editorPath, icon);
       }
     }
   };
+}
+
+/** The site's own icon, described the way a manifest wants it.
+
+    An SVG is declared `sizes: "any"`, which is the spelling that satisfies
+    Chrome's installability check without anybody generating PNGs — and every
+    site in this fleet ships an SVG, which is why the default costs nothing. A
+    raster icon is a different matter: its real dimensions are not knowable
+    without decoding it, and a manifest that lies about a size is worse than
+    one that omits it, so it is declared `any` too and left to the browser to
+    reject if it is too small. */
+function manifestIcons(icon: EditorRouteConfig["icon"]): ManifestIcon[] {
+  if (!icon) return [];
+  return [{ src: icon.href, sizes: "any", type: icon.type, purpose: "any" }];
+}
+
+function emitApp(
+  dir: URL,
+  logger: BuildDoneHook["logger"],
+  options: EditorRouteOptions,
+  app: EditorAppOptions,
+  editorPath: string,
+  icon: EditorRouteConfig["icon"]
+): void {
+  const root = fileURLToPath(dir);
+  const icons = app.icons ?? manifestIcons(icon);
+
+  /* Said out loud rather than left to be discovered. A manifest with no icon
+     is a manifest no browser will ever offer to install, so the feature is
+     simply absent — and an absent feature that nothing complains about is the
+     exact failure shape this repo keeps re-learning. The build still succeeds:
+     an editor that cannot be installed is a working editor. */
+  if (icons.length === 0) {
+    logger.warn(
+      `sitekit: ${MANIFEST_PATH} has no icons, because this site ships none of ` +
+        `favicon.svg, icon.svg, favicon.png or favicon.ico in its publicDir. ` +
+        `The editor will work and will never be offered as an installable app. ` +
+        `Add one of those files, or pass editorRoute({ app: { icons: [...] } }).`
+    );
+  }
+
+  const manifest = editorManifest({
+    name: app.name ?? options.title,
+    ...(app.shortName === undefined ? {} : { shortName: app.shortName }),
+    editorPath,
+    ...(app.themeColor === undefined ? {} : { themeColor: app.themeColor }),
+    ...(app.backgroundColor === undefined ? {} : { backgroundColor: app.backgroundColor }),
+    icons,
+    ...(app.description === undefined ? {} : { description: app.description })
+  });
+
+  writeFileSync(join(root, MANIFEST_PATH), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  writeFileSync(
+    join(root, WORKER_PATH),
+    serviceWorkerSource({
+      editorPath,
+      manifestPath: MANIFEST_PATH,
+      /* The cache name carries the release, so an owner's device drops the
+         previous shell on the first load after a bump instead of serving it
+         until they clear their browser. */
+      version: KIT_VERSION
+    }),
+    "utf8"
+  );
 }

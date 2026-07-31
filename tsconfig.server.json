@@ -16,6 +16,7 @@
     "src/seo",
     "src/analytics",
     "src/cms",
-    "src/internal"
+    "src/internal",
+    "src/version.ts"
   ]
 }
