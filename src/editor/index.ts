@@ -29,6 +29,7 @@ import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
 import { noteEditorVerdict } from "./marker.js";
 import { render, Uploads, type RenderContext } from "./render.js";
+import { searchBox, type SearchBox } from "./search.js";
 import {
   AUTH_RESULT_PARAM,
   BACK_PARAM,
@@ -520,7 +521,18 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     const form = el("div", "sk-editor__form");
     const footer = el("div", "sk-editor__footer");
-    element.append(bar, owner.element, picker, form, footer);
+
+    /* Between the picker and the form, which is where it can be honest about
+       what it reaches: the entry the picker has chosen, and nothing else.
+       Above the form because §A3's whole premise is that "which section is
+       that sentence in" is the question an owner arrives with, and it comes
+       before the scrolling rather than after it. */
+    const finder = searchBox({
+      strings,
+      lang,
+      onPick: (path) => revealField(form, path)
+    });
+    element.append(bar, owner.element, picker, finder.element, form, footer);
 
     /* Not awaited, and its failure is swallowed on purpose. 7.7: "a slow or
        dead Umami cannot delay the form rendering — load it after, and let it
@@ -535,10 +547,10 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     select.addEventListener("change", () => {
       showRoute();
-      void load(select.value, form, footer, route);
+      void load(select.value, form, footer, route, finder);
     });
     showRoute();
-    void load(select.value, form, footer, route);
+    void load(select.value, form, footer, route, finder);
   }
 
   /** A path with its query, its hash and its trailing slash taken off, for
@@ -584,7 +596,8 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     value: string,
     form: HTMLElement,
     footer: HTMLElement,
-    route: HTMLElement
+    route: HTMLElement,
+    finder: SearchBox
   ): Promise<void> {
     const slash = value.indexOf("/");
     const collection = value.slice(0, slash);
@@ -592,6 +605,10 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
 
     form.textContent = "";
     footer.textContent = "";
+    /* Nothing to search until something is loaded, and that includes the case
+       where the load fails: a search field answering "nothing matches" over
+       content that never arrived would be reporting an absence as an answer. */
+    finder.setEntry(null);
     /* The route goes back immediately, before the fetch. A load that fails
        must not also take away the way out of the failure — and until 0.17.0
        it could not, because this link lived beside the picker rather than in
@@ -719,6 +736,11 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       revealField(form, wantedField);
       wantedField = null;
     }
+
+    /* The same object the controls write into as they are typed, not a copy —
+       so a search run after a change finds the words on screen rather than the
+       ones the file had when the panel opened. */
+    finder.setEntry({ fields: body.fields, values: body.values });
 
     let sha = body.sha;
     save.addEventListener("click", () => {

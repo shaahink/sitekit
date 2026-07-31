@@ -68,6 +68,25 @@ export interface EditorStrings {
       typed. Warned rather than discovered. */
   signInLapsedAway: string;
 
+  /* --- finding a word on this page (0.20.0, session 21 §A3) -------------- */
+
+  /** The search field's own label. It says *this page* rather than "search",
+      because what it does and does not reach is the thing an owner has to know
+      before they trust the answer: everything on the entry in front of them,
+      and nothing on the other twenty. */
+  searchLabel: string;
+  /** `{count}` — already pluralised and already in the panel's own digits. */
+  searchCount: string;
+  searchMatch: string;
+  searchMatches: string;
+  /** No match. Said plainly: an empty list under a field an owner has just
+      typed into reads as a fault in the editor rather than an answer. */
+  searchNothing: string;
+  /** Under a list that stopped at its cap. A list of twenty claiming
+      twenty-three matches has hidden three of them and said nothing, which is
+      the one thing a search must not do. */
+  searchNarrow: string;
+
   /** The collection picker's label. */
   editing: string;
   /** `{path}` — which file is open. */
@@ -387,6 +406,13 @@ export const defaultStrings: EditorStrings = {
   signInLapsedAway:
     "Signing in again means leaving this page. Copy anything you've typed before you go.",
 
+  searchLabel: "Find a word on this page",
+  searchCount: "{count} on this page",
+  searchMatch: "match",
+  searchMatches: "matches",
+  searchNothing: "Nothing on this page has those words in it.",
+  searchNarrow: "Type a bit more to narrow this down.",
+
   editing: "Editing",
   editingFile: "Editing {path}",
   emptyList: "Nothing here yet.",
@@ -607,6 +633,16 @@ const fr: EditorStrings = {
   signInLapsedAway:
     "Se reconnecter veut dire quitter cette page. Copiez ce que vous avez écrit avant de partir.",
 
+  /* «trouvé» would have to agree with whatever `{count}` turns out to be, and
+     this table avoids that everywhere for the reason its header gives — so the
+     count is placed rather than qualified. */
+  searchLabel: "Chercher un mot sur cette page",
+  searchCount: "{count} sur cette page",
+  searchMatch: "résultat",
+  searchMatches: "résultats",
+  searchNothing: "Rien sur cette page ne contient ces mots.",
+  searchNarrow: "Écrivez encore un peu pour affiner.",
+
   editing: "Vous modifiez",
   editingFile: "Vous modifiez {path}",
   emptyList: "Rien ici pour l’instant.",
@@ -811,6 +847,16 @@ const fa: EditorStrings = {
   signInDenied: "این حساب اجازهٔ ویرایش این سایت را ندارد.",
   signInLapsedAway:
     "برای ورود دوباره باید از این صفحه بروی. هرچه نوشته‌ای را اول جایی کپی کن.",
+
+  /* `searchMatch` and `searchMatches` are the same word for the same reason
+     `change` and `changes` are: Persian does not pluralise a noun after a
+     numeral, so «۳ مورد» is what a Persian reader expects. */
+  searchLabel: "دنبال کلمه‌ای در این صفحه بگرد",
+  searchCount: "{count} در این صفحه",
+  searchMatch: "مورد",
+  searchMatches: "مورد",
+  searchNothing: "هیچ‌چیزی در این صفحه این کلمه‌ها را ندارد.",
+  searchNarrow: "کمی بیشتر بنویس تا نتیجه‌ها کمتر شوند.",
 
   editing: "در حال ویرایش",
   editingFile: "در حال ویرایش {path}",

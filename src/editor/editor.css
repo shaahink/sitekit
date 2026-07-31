@@ -122,6 +122,97 @@ body {
 
 .sk-editor__picker { margin-block: var(--sk-editor-gap); }
 
+/* Finding a word on this page.
+   ---------------------------------------------------------------------------
+   Under the picker, above the form: it searches the entry the picker chose and
+   nothing else, and where it sits is most of what says so.
+
+   The list is capped and scrolls rather than growing. Twenty results at full
+   height is a phone screen and a half of list between an owner and the form
+   they were about to use, which would make the search worse than the scrolling
+   it replaces. */
+.sk-editor__search { margin-block: var(--sk-editor-gap); }
+/* `hidden` is an attribute the panel sets and nothing here may out-specify it:
+   no entry loaded means no field on screen. */
+.sk-editor__search[hidden] { display: none; }
+
+.sk-editor__searchfield { margin-block-end: 0.5rem; }
+
+.sk-editor__searchcount {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--sk-editor-dim);
+}
+.sk-editor__searchcount:empty { display: none; }
+
+.sk-editor__hits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-block-size: 50vh;
+  overflow-y: auto;
+  /* A list that has been scrolled to its end must not then scroll the panel
+     under it — the owner is aiming at a row, not travelling. */
+  overscroll-behavior: contain;
+}
+.sk-editor__hits[hidden] { display: none; }
+
+.sk-editor__hit {
+  inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  /* Read from the side the panel starts on, whichever that is. */
+  text-align: start;
+  min-block-size: 44px;
+  padding: 0.5rem 0.7rem;
+  margin-block-end: 0.3rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--sk-editor-ink);
+  background: var(--sk-editor-raise);
+  border: 1px solid var(--sk-editor-line-soft);
+  border-radius: var(--sk-editor-radius);
+  cursor: pointer;
+}
+.sk-editor__hit:hover { border-color: var(--sk-editor-line); }
+.sk-editor__hit:focus-visible {
+  outline: 2px solid var(--sk-editor-accent);
+  outline-offset: 2px;
+}
+
+.sk-editor__hitwhere {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: var(--sk-editor-dim);
+}
+.sk-editor__hittrail { color: var(--sk-editor-muted); }
+
+/* One line with an end-of-line ellipsis. The snippet is already cut to the
+   words around the match; this is the guard for a value with no spaces in it,
+   which is what a path or a URL is. */
+.sk-editor__hitsnippet {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* `mark`'s own black-on-yellow is a hole in a dark panel, and it is the one
+   element here whose default colours are set by the browser rather than
+   inherited. */
+.sk-editor__hitmark {
+  background: rgba(111, 147, 201, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding-inline: 0.1em;
+}
+
+.sk-editor__hitmore {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.85rem;
+  color: var(--sk-editor-muted);
+}
+
 /* The way onto the page itself, and back off it. Amended in 0.17.0, and the
    old rule was `.sk-editor__onpage` under the picker with a paragraph about
    how a route nobody finds is not a route.
