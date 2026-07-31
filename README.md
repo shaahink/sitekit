@@ -27,6 +27,10 @@ reference for how a site consumes it.
 | `@shaahink/sitekit/editor/inline-gate` | The one-line entry a public page loads to decide whether inline editing should start at all |
 | `@shaahink/sitekit/editor/editor.css`, `.../inline.css` | Those two surfaces' stylesheets, for a site to copy into `public/` |
 | `@shaahink/sitekit/astro` | The two build-time integrations: `editorRoute()` injects the editor's page, `checkAnnotations()` fails the build when an annotation stops resolving — see below |
+| `@shaahink/sitekit/motion` | The plumbing under a decorative sequence: `mountMotion()`'s loading contract (deferred past load + idle, never under reduced motion, paused off screen, resting frame on a mid-flight preference flip), the forward-kinematics figure rig, the moves a sequence is written out of, and the speech balloon that attributes what it says |
+| `@shaahink/sitekit/motion/rig` | The rig alone: poses as flat joint angles, geometry derived every frame. Pure arithmetic, no DOM — a figure can be rendered to a contact sheet in Node without a browser |
+| `@shaahink/sitekit/motion/moves` | `fall`, `ripple`, `cue`, `timetable` — the four moves every sequence turned out to share, against a one-method timeline contract rather than a tween engine |
+| `@shaahink/sitekit/motion/balloon` | Comic-book speech balloons: `balloon()` spells the outline and its tail as one closed path, `aim()` decides where the tail is rooted and how far it leans so it points at whoever is speaking. Pure arithmetic |
 
 Entry points are separate on purpose: a site importing handlers never pulls in
 widget code, and the handler entries typecheck against WebWorker globals only —
