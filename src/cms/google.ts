@@ -13,7 +13,7 @@
    detail: telling an attacker *which* check failed is free intelligence. */
 
 import { base64UrlDecode, decodeJwtJson } from "../internal/base64url.js";
-import { deadline, JWKS_TIMEOUT_MS } from "../internal/upstream.js";
+import { importVerifyKey } from "../internal/jwks.js";
 
 const DEFAULT_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 
@@ -39,18 +39,6 @@ export interface VerifyOptions {
   fetchImpl?: typeof fetch;
 }
 
-interface KeyCache {
-  url: string;
-  keys: Map<string, JsonWebKey>;
-  expiresAt: number;
-}
-
-/* Warm-instance cache, exactly like app-auth's token cache: survives requests
-   on the same instance, vanishes with it. Google rotates these keys slowly and
-   publishes a Cache-Control we honour, so a cold fetch costs one round-trip
-   every few hours. */
-let cache: KeyCache | null = null;
-
 export async function verifyIdToken(
   credential: string,
   options: VerifyOptions
@@ -68,7 +56,11 @@ export async function verifyIdToken(
   const kid = typeof header.kid === "string" ? header.kid : "";
   if (!kid) throw new Error("credential header has no kid");
 
-  const key = await importKey(kid, options);
+  const key = await importVerifyKey(kid, {
+    url: options.jwksUrl ?? DEFAULT_JWKS_URL,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {})
+  });
   const verified = await crypto.subtle.verify(
     "RSASSA-PKCS1-v1_5",
     key,
@@ -111,66 +103,8 @@ export async function verifyIdToken(
   };
 }
 
-/** Test seam, and the escape hatch if a rotation is ever caught mid-flight. */
-export function clearJwksCache(): void {
-  cache = null;
-}
-
-async function importKey(kid: string, options: VerifyOptions): Promise<CryptoKey> {
-  const url = options.jwksUrl ?? DEFAULT_JWKS_URL;
-  const now = options.now ?? Date.now();
-
-  let keys = await jwks(url, now, options.fetchImpl, false);
-  /* An unknown kid means Google rotated since we cached. One forced refetch
-     distinguishes a real rotation from a forged kid; a second would let a
-     bad token hammer Google on every request. */
-  if (!keys.has(kid)) keys = await jwks(url, now, options.fetchImpl, true);
-
-  const jwk = keys.get(kid);
-  if (!jwk) throw new Error(`no Google key matches kid ${kid}`);
-
-  return crypto.subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-}
-
-async function jwks(
-  url: string,
-  now: number,
-  fetchImpl: typeof fetch | undefined,
-  force: boolean
-): Promise<Map<string, JsonWebKey>> {
-  if (!force && cache && cache.url === url && now < cache.expiresAt) return cache.keys;
-
-  const doFetch = fetchImpl ?? fetch;
-  /* Google's certificate endpoint, on the sign-in path: a hang here is an owner
-     tapping Google's button and getting nothing back. Passed to whatever
-     `fetchImpl` is, because a caller that supplied one still wants the
-     deadline — see internal/upstream.ts. */
-  const signal = deadline(JWKS_TIMEOUT_MS);
-  const response = await doFetch(url, signal ? { signal } : {});
-  if (!response.ok) throw new Error(`JWKS fetch: ${response.status}`);
-  const body = (await response.json()) as { keys?: JsonWebKey[] };
-  if (!body.keys?.length) throw new Error("JWKS response has no keys");
-
-  const keys = new Map<string, JsonWebKey>();
-  for (const jwk of body.keys) {
-    const kid = (jwk as { kid?: string }).kid;
-    if (kid) keys.set(kid, jwk);
-  }
-
-  cache = { url, keys, expiresAt: now + maxAgeMs(response.headers.get("cache-control")) };
-  return keys;
-}
-
-/** Google's Cache-Control is generous (hours). Fall back to an hour, and cap
-    nothing — the forced refetch above covers an early rotation. */
-function maxAgeMs(header: string | null): number {
-  const match = header?.match(/max-age=(\d+)/);
-  const seconds = match?.[1] ? Number(match[1]) : 0;
-  return (seconds > 0 ? seconds : 3600) * 1000;
-}
+/** Test seam, and the escape hatch if a rotation is ever caught mid-flight.
+    Re-exported rather than reimplemented: the cache moved to internal/jwks.ts
+    at 0.19.0 so Google's keys and the auth origin's stop evicting each other,
+    and every existing caller of this name keeps working. */
+export { clearJwksCache } from "../internal/jwks.js";

@@ -33,6 +33,10 @@ import { LANG_PARAM } from "./strings.js";
 export const RETURN_PARAM = "from";
 export const BACK_PARAM = "back";
 export const EDIT_PARAM = "edit";
+/** How a refused hand-off says so. The callback in `cms/auth.ts` cannot put a
+    reason in a body — it is a redirect — so it puts one here and the panel says
+    it in the owner's own language. Values: `denied`, `down`, `failed`. */
+export const AUTH_RESULT_PARAM = "sk_auth";
 /** The fourth link, added in 0.17.0 for §2.5: *"show me how"* from the panel's
     welcome notice onto the owner's own page, with the tour armed. It is a
     separate parameter from `edit` because the two are separate facts — every

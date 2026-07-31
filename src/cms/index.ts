@@ -1,5 +1,26 @@
 export { createContentHandler, type ContentHandler } from "./handler.js";
 export { createAuthHandler, type AuthHandler, type AuthHandlerOptions } from "./auth.js";
+export {
+  createHandoffHandler,
+  allowedReturn,
+  requestOrigin,
+  type HandoffHandler,
+  type HandoffHandlerOptions
+} from "./handoff.js";
+export {
+  signTicket,
+  verifyTicket,
+  ticketJwks,
+  ticketKid,
+  clearTicketKeyCache,
+  handoffUrl,
+  jwksUrl,
+  randomToken,
+  trimOrigin,
+  type TicketClaims,
+  type SignTicketOptions,
+  type VerifyTicketOptions
+} from "./ticket.js";
 export { verifyIdToken, clearJwksCache, type GoogleIdentity, type VerifyOptions } from "./google.js";
 export {
   issueSession,

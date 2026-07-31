@@ -181,7 +181,12 @@ describe("the JWKS cache", () => {
 
   it("does not hammer Google when a forged kid never resolves", async () => {
     const token = await sign(claims(), { kid: "invented" });
-    await expect(verifyIdToken(token, options())).rejects.toThrow(/no Google key/);
+    /* The message names the issuer's URL since 0.19.0, because there are two
+       of them now — Google's and the fleet auth origin's — and "no key matches
+       kid" in a log without saying whose keys were consulted is half a fact. */
+    await expect(verifyIdToken(token, options())).rejects.toThrow(
+      /no key at https:\/\/jwks\.test\/certs matches kid invented/
+    );
     /* One cached read, one forced refetch, and then it gives up. */
     expect(fetches).toBe(2);
   });

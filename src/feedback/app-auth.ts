@@ -12,6 +12,7 @@
    runtime conversion would drag in a dependency. */
 
 import { base64UrlEncode, base64UrlJson } from "../internal/base64url.js";
+import { pkcs8ToDer } from "../internal/pem.js";
 import { deadline, GITHUB_TIMEOUT_MS } from "../internal/upstream.js";
 
 export interface AppAuthOptions {
@@ -77,7 +78,7 @@ export async function appJwt(appId: string, privateKey: string, now: number = Da
 
   const cryptoKey = await crypto.subtle.importKey(
     "pkcs8",
-    pemToDer(privateKey),
+    pkcs8ToDer(privateKey, "GitHub App key"),
     { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
     false,
     ["sign"]
@@ -93,21 +94,5 @@ export async function appJwt(appId: string, privateKey: string, now: number = Da
 /** Test seam: a fresh mint on demand without waiting an hour. */
 export function clearAppTokenCache(): void {
   cache.clear();
-}
-
-function pemToDer(pem: string): ArrayBuffer {
-  if (pem.includes("RSA PRIVATE KEY")) {
-    throw new Error(
-      "GitHub App key is PKCS#1; convert to PKCS#8 first: openssl pkcs8 -topk8 -nocrypt -in app.pem"
-    );
-  }
-  const base64 = pem
-    .replace(/-----BEGIN PRIVATE KEY-----/, "")
-    .replace(/-----END PRIVATE KEY-----/, "")
-    .replace(/\s+/g, "");
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
 }
 

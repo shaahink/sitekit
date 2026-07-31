@@ -18,6 +18,22 @@ export interface CmsEnv {
   /** HMAC key for the session cookie. Rotating it signs everyone out. */
   sessionSecret?: string | undefined;
 
+  /* Session 22 — the fleet signs people in on one origin.
+
+     `authOrigin` is a **site's** whole share of it: the URL of the origin that
+     is registered with Google, identical on every site in the fleet, and not a
+     secret. Set it and the editor prefers the hand-off; leave it unset and
+     nothing changes. `CMS_AUTH_ORIGIN`.
+
+     The other two belong to the auth origin alone and mean nothing on a site.
+     `ticketPrivateKey` is the one new secret this design adds anywhere —
+     PKCS#8 PEM, `CMS_TICKET_PRIVATE_KEY`. `fleetOrigins` is the list of
+     origins it will sign a ticket for, which is what stops it being an open
+     redirector that signs what it hands over; `CMS_FLEET_ORIGINS`. */
+  authOrigin?: string | undefined;
+  ticketPrivateKey?: string | undefined;
+  fleetOrigins?: string | undefined;
+
   /* The App trio, already on every deployment for feedback. */
   appId?: string | undefined;
   appPrivateKey?: string | undefined;

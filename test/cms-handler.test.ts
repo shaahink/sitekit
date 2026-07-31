@@ -489,7 +489,16 @@ describe("the auth endpoint", () => {
 
   it("publishes the client ID so the page can render a working button", async () => {
     const body = await (await auth.GET()).json();
-    expect(body).toEqual({ ok: true, configured: true, clientId: env.googleClientId });
+    /* `paths` joined the answer at 0.19.0. A site with a Google client and no
+       `CMS_AUTH_ORIGIN` offers exactly one way in and says so by name — which
+       is what lets the editor stop treating `configured` as a synonym for
+       "render Google's button". */
+    expect(body).toEqual({
+      ok: true,
+      configured: true,
+      paths: ["google"],
+      clientId: env.googleClientId
+    });
   });
 
   it("reports itself unconfigured rather than serving a button that can't work", async () => {

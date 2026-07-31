@@ -20,7 +20,7 @@ reference for how a site consumes it.
 | `@shaahink/sitekit/seo` | Site URLs, canonicals and sitemaps from one source |
 | `@shaahink/sitekit/analytics` | The Umami tag |
 | `@shaahink/sitekit/stats` | Reading that instance back, server side: a single-flight cached login, team-scoped enumeration for a fleet, and one site's totals, top pages and share link for its owner |
-| `@shaahink/sitekit/cms` | The owner's editor, server side: Google ID token verification, a signed session cookie, a form model generated from a collection's Zod schema, a comment-preserving YAML writer that commits through the GitHub App, and the owner's home — their traffic, their recent changes, whether the last one is live |
+| `@shaahink/sitekit/cms` | The owner's editor, server side: Google ID token verification, the fleet sign-in hand-off (both halves — see below), a signed session cookie, a form model generated from a collection's Zod schema, a comment-preserving YAML writer that commits through the GitHub App, and the owner's home — their traffic, their recent changes, whether the last one is live |
 | `@shaahink/sitekit/visibility` | Reading a section's `visible` flag the one safe way — a missing flag means *shown* |
 | `@shaahink/sitekit/editor` | The owner's editor, browser side: `mountEditor(element)` builds the whole panel from the form model. Chrome included — see below |
 | `@shaahink/sitekit/editor/inline` | Editing the words on the page they are on: `startInlineEditor()`, driven by the `data-sk-edit` annotations |
@@ -169,6 +169,61 @@ place.
 It takes the same `editable` map `api/content.ts` hands `createContentHandler`,
 which is why that map has always been a Zod-only module with nothing
 Astro-shaped in it. Nothing new is declared, so nothing can drift.
+
+### The fleet sign-in hand-off (0.19.0)
+
+Google matches Authorised JavaScript Origins exactly and offers no wildcard, so
+before this every new site cost a visit to somebody else's console before its
+owner could sign in at all. `sessions/22-fleet-auth.md` in `sk-platform` is the
+decision record and the argument; this is the wiring.
+
+**A site's whole share is one environment variable**, whose value is the same
+string on every site in the fleet:
+
+```
+CMS_AUTH_ORIGIN=https://sk.works
+```
+
+and one line in the `api/auth.ts` it already has —
+`authOrigin: process.env.CMS_AUTH_ORIGIN` beside the three variables that are
+there. No new route file, no new secret, no console visit. `createAuthHandler`'s
+existing `GET` grew two shapes: `?handoff=1&to=…` starts the hand-off, and
+`?ticket=…&state=…` finishes it. `allows()`, `issueSession()` and everything
+downstream are untouched.
+
+**The auth origin mounts the issuer**, as one route file, and holds the one new
+secret this design adds anywhere:
+
+```js
+// api/handoff.ts on the auth origin
+import { createHandoffHandler } from "@shaahink/sitekit/cms";
+
+const handler = createHandoffHandler({
+  env: () => ({
+    googleClientId: process.env.CMS_GOOGLE_CLIENT_ID,
+    ticketPrivateKey: process.env.CMS_TICKET_PRIVATE_KEY,  // PKCS#8 PEM
+    fleetOrigins: process.env.CMS_FLEET_ORIGINS            // who it will sign for
+  })
+});
+
+export const GET = handler.GET;
+export const POST = handler.POST;
+```
+
+It serves the sign-in page on the one registered origin, publishes its JWKS at
+`?jwks=1`, and answers `?ping=1` for whatever watches the fleet. `CMS_FLEET_ORIGINS`
+is what stops it being an open redirector *that signs what it hands over*, so it
+is compared exactly — with one exception, a `*` that may be a prefix within a
+single host label and never a whole one, because a Vercel preview host is minted
+per deployment and cannot be written down in advance.
+
+The ticket is RS256, signed with Web Crypto against machinery `feedback/app-auth.ts`
+already had, and it carries **identity and not permission**: the issuer mints one
+for any Google account that signs in, including a stranger's, and each site's own
+`CMS_ALLOWLIST` still answers *may you edit me*. That split is deliberate — a
+central directory of who may edit what would make one site the single point of
+failure for every client's content, and would move "who can edit this site" out
+of that site's own repository.
 
 ## The portability contract
 

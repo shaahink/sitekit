@@ -44,6 +44,30 @@ export interface EditorStrings {
   gisFailed: string;
   signOut: string;
 
+  /* --- the fleet hand-off (0.19.0, session 22) --------------------------- */
+
+  /** The button that starts the hand-off. It says Google because that is what
+      the owner will see when they get there, and a button that named our own
+      sign-in page would be asking them to trust a second brand on the way to
+      the one they already know. */
+  signInHandoff: string;
+  /** What pressing it does, said before it happens: an owner who is bounced to
+      another host without warning has been given a reason to stop. */
+  signInHandoffNote: string;
+  /** Decision 5, the case that must not fail silently: the site is fine, the
+      sign-in origin is not answering, and only that origin can let them in. */
+  signInHandoffDown: string;
+  /** Between the hand-off and Google's own button, where a site has both. */
+  signInOr: string;
+  /** The callback's refusal, said on the site the owner came back to. The POST
+      path can put this in a response body; a redirect cannot, so the editor
+      reads `?sk_auth=denied` and says it here. */
+  signInDenied: string;
+  /** Signing in again after a session lapsed mid-edit, where the only way in
+      is a hand-off — which is a navigation, and a navigation loses what they
+      typed. Warned rather than discovered. */
+  signInLapsedAway: string;
+
   /** The collection picker's label. */
   editing: string;
   /** `{path}` — which file is open. */
@@ -338,6 +362,17 @@ export const defaultStrings: EditorStrings = {
   gisFailed: "Google's sign-in script didn't load.",
   signOut: "Sign out",
 
+  signInHandoff: "Sign in with Google",
+  signInHandoffNote:
+    "You'll sign in on our sign-in page, and come straight back here afterwards.",
+  signInHandoffDown:
+    "Our sign-in page isn't answering at the moment. Nothing is wrong with your site — " +
+    "please try again in a few minutes.",
+  signInOr: "or",
+  signInDenied: "That account can't edit this site.",
+  signInLapsedAway:
+    "Signing in again means leaving this page. Copy anything you've typed before you go.",
+
   editing: "Editing",
   editingFile: "Editing {path}",
   emptyList: "Nothing here yet.",
@@ -543,6 +578,17 @@ const fr: EditorStrings = {
   gisFailed: "Le script de connexion de Google ne s’est pas chargé.",
   signOut: "Se déconnecter",
 
+  signInHandoff: "Se connecter avec Google",
+  signInHandoffNote:
+    "Vous vous connecterez sur notre page de connexion, puis vous reviendrez directement ici.",
+  signInHandoffDown:
+    "Notre page de connexion ne répond pas pour le moment. Votre site n’a aucun problème — " +
+    "réessayez dans quelques minutes.",
+  signInOr: "ou",
+  signInDenied: "Ce compte ne peut pas modifier ce site.",
+  signInLapsedAway:
+    "Se reconnecter veut dire quitter cette page. Copiez ce que vous avez écrit avant de partir.",
+
   editing: "Vous modifiez",
   editingFile: "Vous modifiez {path}",
   emptyList: "Rien ici pour l’instant.",
@@ -734,6 +780,15 @@ const fa: EditorStrings = {
   signInFailed: "این ورود نگرفت.",
   gisFailed: "اسکریپت ورود گوگل بارگذاری نشد.",
   signOut: "خروج از حساب",
+
+  signInHandoff: "ورود با گوگل",
+  signInHandoffNote: "در صفحهٔ ورود ما وارد می‌شوی و بعدش یک‌راست به همین‌جا برمی‌گردی.",
+  signInHandoffDown:
+    "صفحهٔ ورود ما الان جواب نمی‌دهد. سایت تو هیچ مشکلی ندارد — چند دقیقهٔ دیگر دوباره امتحان کن.",
+  signInOr: "یا",
+  signInDenied: "این حساب اجازهٔ ویرایش این سایت را ندارد.",
+  signInLapsedAway:
+    "برای ورود دوباره باید از این صفحه بروی. هرچه نوشته‌ای را اول جایی کپی کن.",
 
   editing: "در حال ویرایش",
   editingFile: "در حال ویرایش {path}",

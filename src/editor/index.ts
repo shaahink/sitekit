@@ -28,7 +28,14 @@ import { copyText, cssEscape, el, labelled, link, reveal } from "./dom.js";
 import { loadGis } from "./gis.js";
 import { home, type HomeData } from "./home.js";
 import { render, Uploads, type RenderContext } from "./render.js";
-import { BACK_PARAM, editHref, fieldFromHash, RETURN_PARAM, safeReturnPath } from "./return-to.js";
+import {
+  AUTH_RESULT_PARAM,
+  BACK_PARAM,
+  editHref,
+  fieldFromHash,
+  RETURN_PARAM,
+  safeReturnPath
+} from "./return-to.js";
 import {
   digitsFor,
   dirFor,
@@ -231,21 +238,47 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
        §1.3 measured the old first screen as two sentences and a button, with
        every word of reassurance behind the sign-in it was meant to make safe. */
     card.append(el("p", "sk-editor__welcometext", strings.signInWhat));
+
+    /* A hand-off that was refused comes back as a redirect, and a redirect has
+       no body to put a reason in — so the reason arrives as a parameter and is
+       said here, on the owner's own site, in the owner's own language. Read
+       before the buttons are drawn, because "that account can't edit this
+       site" is the answer to a question they have already asked. */
+    const refused = new URLSearchParams(location.search).get(AUTH_RESULT_PARAM);
+    if (refused === "denied") {
+      card.append(el("p", "sk-editor__error", strings.signInDenied));
+    } else if (refused === "down") {
+      card.append(el("p", "sk-editor__error", strings.signInHandoffDown));
+    } else if (refused === "failed") {
+      card.append(el("p", "sk-editor__error", strings.signInFailed));
+    }
+
     element.append(card);
     await mountGoogleButton(card, () => void start());
   }
 
-  /** Google's button, in whatever container asked for it, calling back once
-      the session exists. Two callers: the sign-in screen, and the note under
-      a save that was refused because the session had lapsed — where the whole
-      point is that the owner signs in *without the page reloading*, because a
-      reload is what would lose the work this is promising to keep. */
-  async function mountGoogleButton(host: HTMLElement, onSignedIn: () => void): Promise<void> {
+  /** Every way in this site has, in whatever container asked for it, calling
+      back once the session exists. Two callers: the sign-in screen, and the
+      note under a save that was refused because the session had lapsed — where
+      the whole point is that the owner signs in *without the page reloading*,
+      because a reload is what would lose the work this is promising to keep.
+      That second caller passes `navigable: false`, which is what keeps the
+      hand-off — a full navigation — from being offered as if it were free. */
+  async function mountGoogleButton(
+    host: HTMLElement,
+    onSignedIn: () => void,
+    { navigable = true }: { navigable?: boolean } = {}
+  ): Promise<void> {
     /* Guarded like every other fetch on this surface. Unguarded, a phone with
        no signal rejected here and took the *caller* with it — and one of the
        two callers is the note under a refused save, where the whole promise is
        that the owner's work survives. See the header of `commit`. */
-    let config: { configured?: boolean; clientId?: string };
+    let config: {
+      configured?: boolean;
+      clientId?: string;
+      paths?: string[];
+      authOrigin?: string;
+    };
     try {
       config = (await (await fetch(auth)).json()) as typeof config;
     } catch {
@@ -253,7 +286,31 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       return;
     }
 
-    if (!config.configured || !config.clientId) {
+    if (!config.configured) {
+      host.append(el("p", "sk-editor__note", strings.signInUnavailable));
+      return;
+    }
+
+    /* Decision 5: prefer the hand-off wherever it exists. A site cannot know
+       whether its own origin is registered with Google without asking Google,
+       so advertising the direct button first is advertising something that may
+       be an empty rectangle — which is the exact failure session 22 is about. */
+    const paths = config.paths ?? (config.clientId ? ["google"] : []);
+    const handoff = paths.includes("handoff") && Boolean(config.authOrigin);
+    const direct = paths.includes("google") && Boolean(config.clientId);
+
+    if (handoff) {
+      /* The one case where the way in and the work are in conflict: signing in
+         again is a navigation, and a navigation loses what they typed. Said
+         plainly instead of drawn as a button that silently discards it. */
+      if (!navigable) host.append(el("p", "sk-editor__note", strings.signInLapsedAway));
+      mountHandoff(host);
+      if (!direct) return;
+      host.append(el("p", "sk-editor__note", strings.signInOr));
+    }
+
+    const clientId = config.clientId;
+    if (!direct || !clientId) {
       host.append(el("p", "sk-editor__note", strings.signInUnavailable));
       return;
     }
@@ -271,7 +328,7 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
     }
 
     gis.accounts.id.initialize({
-      client_id: config.clientId,
+      client_id: clientId,
       callback: ({ credential }) => {
         void submitCredential(credential, host, onSignedIn);
       }
@@ -288,6 +345,42 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
          range is Google's: it refuses anything outside 200–400. */
       width: buttonWidth(slot)
     });
+  }
+
+  /** The fleet hand-off, as one button.
+
+      Nothing here asks the auth origin anything, and that is deliberate rather
+      than lazy. This page's CSP declares `connect-src 'self'
+      https://accounts.google.com` — a fetch from here to the sign-in origin
+      would be blocked on every site in the fleet, in production only, where no
+      test would ever have seen it. The site's own `/api/auth` asks instead,
+      server to server, and redirects straight back with `sk_auth=down` if the
+      answer is no. So this is one navigation to one same-origin route. */
+  function mountHandoff(host: HTMLElement): void {
+    host.append(el("p", "sk-editor__note", strings.signInHandoffNote));
+
+    const go = el("button", "sk-editor__signinbutton", strings.signInHandoff);
+    go.type = "button";
+    host.append(go);
+
+    go.addEventListener("click", () => {
+      go.disabled = true;
+      location.assign(handoffStart());
+    });
+  }
+
+  /** Where to send the browser to begin. `to` is this page as it stands, minus
+      the parameter a previous refusal left behind — an owner who signs in
+      successfully should not come back to a page still saying they were
+      refused. */
+  function handoffStart(): string {
+    const here = new URL(location.href);
+    here.searchParams.delete(AUTH_RESULT_PARAM);
+    const start = new URL(auth, location.href);
+    start.searchParams.set("handoff", "1");
+    start.searchParams.set("to", `${here.pathname}${here.search}`);
+    start.searchParams.set("lang", lang);
+    return `${start.pathname}${start.search}`;
   }
 
   function buttonWidth(slot: HTMLElement): number {
@@ -753,11 +846,20 @@ export async function mountEditor(element: HTMLElement, options: EditorOptions =
       note.textContent = strings.expired;
       const again = el("div", "sk-editor__reauth");
       note.after(again);
-      void mountGoogleButton(again, () => {
-        again.remove();
-        note.textContent = args.resting;
-        args.changed();
-      });
+      void mountGoogleButton(
+        again,
+        () => {
+          again.remove();
+          note.textContent = args.resting;
+          args.changed();
+        },
+        /* The hand-off is a navigation, and a navigation is exactly what this
+           block exists to avoid. Where it is the only way in it is still shown
+           — with the warning `signInLapsedAway` carries — because the
+           alternative is an owner staring at a Save button that will never
+           work again. */
+        { navigable: false }
+      );
       return null;
     }
 
