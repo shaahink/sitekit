@@ -107,6 +107,14 @@
       "types": "./dist/motion/balloon.d.ts",
       "default": "./dist/motion/balloon.js"
     },
+    "./motion/figure": {
+      "types": "./dist/motion/figure.d.ts",
+      "default": "./dist/motion/figure.js"
+    },
+    "./companion": {
+      "types": "./dist/motion/companion.d.ts",
+      "default": "./dist/motion/companion.js"
+    },
     "./astro": {
       "types": "./dist/astro/index.d.ts",
       "default": "./dist/astro/index.js"
