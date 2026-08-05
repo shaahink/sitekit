@@ -112,7 +112,14 @@ describe("the lifted translations", () => {
      in a screen reader — so they are new writing here and have nothing to be
      compared against. Everything else must match to the character. */
   const written = ["regionLabel", "more"];
-  const lifted = keys.filter((key) => !written.includes(key));
+  /* `sentBody` is a different case and must not be folded into the list above:
+     the fixture *has* it, and the tables now deliberately disagree with it.
+     Every site was serving a sentence that named the owner; 0.25.0 takes the
+     name out, so the fixture stops being the target for this one key while
+     staying the record of what was served. Two reasons, two lists — a single
+     list would make the comment above untrue for one of its members. */
+  const diverged = ["sentBody"];
+  const lifted = keys.filter((key) => !written.includes(key) && !diverged.includes(key));
 
   for (const [locale, table] of Object.entries(widgetLocales)) {
     it(`${locale} matches what the fleet was serving`, () => {
@@ -120,21 +127,25 @@ describe("the lifted translations", () => {
       for (const key of lifted) {
         expect(table[key], `${locale}.${key}`).toBe(source[key]);
       }
-      expect(Object.keys(source).sort()).toEqual([...lifted].sort());
+      expect(Object.keys(source).sort()).toEqual([...lifted, ...diverged].sort());
     });
   }
 
   /* Two details worth pinning because a well-meaning edit would "fix" them:
-     the Persian count is written with a Persian numeral, and all three tables
-     name Shahin — which every site was already saying, and which a kit release
-     is the wrong place to silently change. */
+     the Persian count is written with a Persian numeral, and no table names
+     the owner. The second assertion used to read the other way round, and it
+     was wrong in the direction that is hard to see: a reviewer on a client's
+     site got a stranger's first name as the proof their note had gone
+     somewhere. Restoring the name to make this pass would be restoring that. */
   it("keeps the Persian numeral in fa.countOne", () => {
     expect(widgetLocales.fa!.countOne).toContain("۱");
   });
 
-  it("keeps the studio's name where all six sites had it", () => {
-    for (const table of Object.values(widgetLocales)) {
-      expect(table.sentBody.toLowerCase()).toMatch(/shahin|شاهین/);
+  it("names nobody, on a site that is not ours", () => {
+    for (const [locale, table] of Object.entries(widgetLocales)) {
+      for (const [key, value] of Object.entries(table)) {
+        expect(value.toLowerCase(), `${locale}.${key}`).not.toMatch(/shahin|شاهین/);
+      }
     }
   });
 });

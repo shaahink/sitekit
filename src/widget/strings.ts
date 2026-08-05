@@ -18,11 +18,16 @@
 
    `{n}` placeholders are filled by `fill()`.
 
-   One deliberate difference from the editor's rule that "nothing here names a
-   studio, an owner or a site": `sentBody` says *Shahin* in all three tables,
-   because all six sites were saying it and a kit release is not the place to
-   silently change what somebody's reviewer reads. A site that is not ours
-   overrides one string. */
+   `sentBody` used to be a deliberate exception to the editor's rule that
+   "nothing here names a studio, an owner or a site" — it said *Shahin* in all
+   three tables, on the argument that all six sites were already saying it. The
+   argument was backwards. What it was defending is the reason to change it: a
+   reviewer on a client's site was reading a stranger's first name as the
+   confirmation that their note had gone somewhere, and no site that is not
+   ours should have to override a string to stop naming somebody. It now says
+   only that the note arrived, which is the sentence's whole job and is true
+   everywhere. The exception is gone and there is no longer any difference from
+   the editor's rule; `widget-strings.test.ts` holds the tables to it. */
 
 export interface WidgetStrings {
   /** The pill's resting label, and what it goes back to after picking. */
@@ -88,7 +93,7 @@ export const defaultStrings: WidgetStrings = {
   sending: "Sending…",
   sent: "Sent — thank you!",
   sentTitle: "Sent!",
-  sentBody: "Your note landed with Shahin. Keep going — leave as many as you like.",
+  sentBody: "Your note landed. Keep going — leave as many as you like.",
   failed: "Couldn’t send that.",
   copy: "Copy the text",
   copied: "Copied",
@@ -120,7 +125,7 @@ const fr: WidgetStrings = {
   sending: "Envoi…",
   sent: "Envoyé, merci !",
   sentTitle: "C’est envoyé !",
-  sentBody: "Votre note est arrivée chez Shahin. Continuez, il y en a autant que vous voulez.",
+  sentBody: "Votre note est bien arrivée. Continuez, il y en a autant que vous voulez.",
   failed: "Envoi impossible.",
   copy: "Copier le texte",
   copied: "Copié",
@@ -154,7 +159,7 @@ const fa: WidgetStrings = {
   sending: "در حال ارسال…",
   sent: "رسید — ممنون!",
   sentTitle: "رسید!",
-  sentBody: "یادداشتت به شاهین رسید. ادامه بده — هرچندتا خواستی بنویس.",
+  sentBody: "یادداشتت رسید. ادامه بده — هرچندتا خواستی بنویس.",
   failed: "ارسال نشد.",
   copy: "کپی متن",
   copied: "کپی شد",
