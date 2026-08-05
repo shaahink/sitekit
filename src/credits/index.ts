@@ -33,6 +33,17 @@ export interface CreditsOptions {
    end means no footer is ever briefly wrong. */
 const DEFAULT_HREF = "https://sk-works.vercel.app";
 
+/** Where the credit points, with the default already applied.
+
+    Exported in 0.26.0 because a second thing needs the same answer: the
+    companion that can now stand on the credit says one line and that line is an
+    offer to visit the same place. Two reads of `options.href || DEFAULT_HREF`
+    would be two places a footer's destination is decided, and the one that got
+    edited would be whichever the next reader happened to open. */
+export function creditHref(options: Pick<CreditsOptions, "href"> = {}): string {
+  return options.href || DEFAULT_HREF;
+}
+
 /** The visible link: `<a class="sk-credit" href="…" rel="author">sk</a>`.
 
     **Opens in a new tab, since 0.23.0.** This link sits on a client's page, and
@@ -49,7 +60,7 @@ const DEFAULT_HREF = "https://sk-works.vercel.app";
     it is written out because "implied by the browsers we tested" is not the
     same claim as "stated". */
 export function creditsAnchor(options: CreditsOptions): string {
-  const href = options.href || DEFAULT_HREF;
+  const href = creditHref(options);
   const label = options.label || "sk";
   const className = options.className || "sk-credit";
   return (
@@ -120,7 +131,7 @@ export function creditsJsonLd(options: CreditsOptions): string {
     creator: {
       "@type": "Organization",
       name: options.organizationName || "sk",
-      url: options.href || DEFAULT_HREF
+      url: creditHref(options)
     }
   };
   /* "<" must not appear raw inside a script element. */

@@ -29,11 +29,14 @@ const SURFACE: [string, string[]][] = [
   ["@shaahink/sitekit/app", ["createPasskey", "createLadder", "createPwa"]],
   ["@shaahink/sitekit/editor", ["mountEditor"]],
   ["@shaahink/sitekit/astro", ["editorRoute", "checkAnnotations", "checkPlaceholders"]],
-  ["@shaahink/sitekit/credits", ["creditLine", "creditsFor", "creditsAnchor", "creditsJsonLd"]],
+  [
+    "@shaahink/sitekit/credits",
+    ["creditLine", "creditsFor", "creditsAnchor", "creditsJsonLd", "creditHref"]
+  ],
   ["@shaahink/sitekit/version", ["KIT_VERSION"]],
   ["@shaahink/sitekit/feedback", ["createFeedbackHandler"]],
   ["@shaahink/sitekit/widget", ["refine", "shrink", "squash"]],
-  ["@shaahink/sitekit/companion", ["mountCompanion", "skFigure", "PACE"]],
+  ["@shaahink/sitekit/companion", ["mountCompanion", "companionAt", "skFigure", "PACE"]],
   ["@shaahink/sitekit/motion/figure", ["createFigure", "stance", "emit", "flip", "PARTS"]]
 ];
 

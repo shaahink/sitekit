@@ -185,6 +185,29 @@ export const skFigure: CompanionRig = {
 
 /* --- what he says, and where he stands ----------------------------------- */
 
+/** Where the offer goes, when an href is not the whole of the destination.
+
+    **A credit in somebody else's footer is the case that needs the long form.**
+    On the site that owns the offer it is `#contact` and staying in the tab is
+    the entire point. On a client's footer the same mechanism has to open a new
+    tab, for the reason `credits/index.ts` has been giving since 0.23.0: a
+    visitor who taps a footer credit has not decided to leave, and navigating
+    them off the client's site to satisfy a curiosity is a cost the client pays
+    for somebody else's benefit.
+
+    The string form is the common one and means exactly what it always meant. */
+export interface CompanionAsk {
+  href: string;
+  /** `"_blank"`, or absent to leave the anchor's target alone. */
+  target?: string | null | undefined;
+  /** The destination's relationship — `"author noopener"` for a studio credit.
+      **`noreferrer` is not in that list and adding it is not an improvement**:
+      the referrer is how the far end of an acquisition link learns which site
+      sent somebody, and its absence is deliberate in the emitter this
+      mirrors. */
+  rel?: string | null | undefined;
+}
+
 export interface CompanionLine {
   /** Which stage this belongs to, or `"landing"` — the pool of asides any
       landing can draw from. */
@@ -193,7 +216,17 @@ export interface CompanionLine {
   /** **The one line that is not a joke.** A destination makes this line the
       offer: it is announced, it is clickable, and it happens once. Every other
       line is `aria-hidden` decoration. Null or absent on all of them. */
-  ask?: string | null | undefined;
+  ask?: string | CompanionAsk | null | undefined;
+}
+
+/** A line after the offer has been read into one shape. The public form takes a
+    bare href because that is what nine lines in ten want; everything below this
+    point deals with one type and never with the two. */
+type Line = { at: string; text: string; ask: CompanionAsk | null };
+
+function readAsk(ask: CompanionLine["ask"]): CompanionAsk | null {
+  if (!ask) return null;
+  return typeof ask === "string" ? { href: ask } : ask.href ? ask : null;
 }
 
 /** Down a document, standing on the top edges of whatever the selector finds.
@@ -544,20 +577,47 @@ const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.m
     Idempotence is the caller's concern: call once per element. */
 export function mountCompanion(host: HTMLElement | null, options: CompanionOptions = {}): void {
   if (!host) return;
-
-  const placement: CompanionPlacement = options.placement ?? { mode: "anchor" };
-  const anchored = placement.mode === "anchor";
-  const pace: CompanionPace = {
-    ...PACE,
-    ...(anchored ? ANCHOR_PACE : {}),
-    ...(options.pace ?? {})
-  };
-
   mountMotion(
     host,
-    async () => start(host, placement, pace, options),
-    anchored ? {} : { rootMargin: NEVER_OFFSCREEN }
+    async () => companionAt(host, options),
+    options.placement?.mode === "roam" ? { rootMargin: NEVER_OFFSCREEN } : {}
   );
+}
+
+/** The same companion, for a caller that has **already** paid the deferral.
+
+    `mountCompanion` is the whole answer for a site that imports this module
+    directly: it is the mount and the waiting in one call. But an importer whose
+    point is that this module is *not on the critical path* has to do the
+    waiting first and the importing second —
+
+    ```js
+    import { mountMotion } from "@shaahink/sitekit/motion";
+    mountMotion(host, async () => {
+      const { companionAt } = await import("@shaahink/sitekit/companion");
+      return companionAt(host, options);
+    });
+    ```
+
+    — because a static import of this file is this file's bytes on the page's
+    critical path whatever `mountMotion` does with them afterwards. That is
+    `boot.ts`'s rule 1 read exactly: *`start` is not called, and therefore
+    whatever it dynamically imports is not fetched*. Calling `mountCompanion`
+    from inside that callback would work and would wait through a second idle
+    callback and hand `mountMotion` a `void` where it wants controls, so the
+    intersection observer that pauses him off screen would never be attached.
+
+    Exported rather than left as the private `start` so the deferring caller
+    gets the placement defaults, `ANCHOR_PACE` and the option merge instead of
+    a second copy of them. Idempotence is still the caller's concern. */
+export function companionAt(host: HTMLElement, options: CompanionOptions = {}) {
+  const placement: CompanionPlacement = options.placement ?? { mode: "anchor" };
+  const pace: CompanionPace = {
+    ...PACE,
+    ...(placement.mode === "anchor" ? ANCHOR_PACE : {}),
+    ...(options.pace ?? {})
+  };
+  return start(host, placement, pace, options);
 }
 
 function start(
@@ -636,9 +696,9 @@ function start(
   /* The one thing the sheet cannot work out for itself: a rig's own aspect. */
   host.style.setProperty("--sk-mate-aspect", String(vw / vh));
 
-  const script: CompanionLine[] = (options.lines ?? [])
+  const script: Line[] = (options.lines ?? [])
     .filter((l) => l && l.text)
-    .map((l) => ({ at: l.at, text: l.text, ask: l.ask ?? null }));
+    .map((l) => ({ at: l.at, text: l.text, ask: readAsk(l.ask) }));
 
   /** **One line, drawn at random from the ones he has not used, and not put
       back.** This was the *first* entry whose stage matched, which is exactly
@@ -650,8 +710,8 @@ function start(
       line rather than the one he already has, and when a section is out of
       lines he stands there in silence — which is what he does on most landings
       anyway and reads as a character who has said his piece. */
-  const said = new Set<CompanionLine>();
-  const draw = (at: string): CompanionLine | null => {
+  const said = new Set<Line>();
+  const draw = (at: string): Line | null => {
     const pool = script.filter((l) => l.at === at && !l.ask && !said.has(l));
     return pool.length ? pool[(Math.random() * pool.length) | 0] ?? null : null;
   };
@@ -899,7 +959,7 @@ function start(
       spent before calling: a line that arrived inside the gap was swallowed
       here and struck off up there, so the reader lost a sentence to a clock and
       the pool lost it for the rest of the visit. */
-  const say = (line: CompanionLine | null, now: number): boolean => {
+  const say = (line: Line | null, now: number): boolean => {
     if (!line?.text) return false;
     /* The belt to the braces on every call site: while the film is up he has
        nothing to say, and a later caller that forgets to ask cannot make him
@@ -922,7 +982,11 @@ function start(
       sayText.textContent = "";
       sayEl.classList.add("is-ask");
       sayEl.removeAttribute("aria-hidden");
-      sayText.setAttribute("href", line.ask);
+      sayText.setAttribute("href", line.ask.href);
+      /* Written only when the destination asked for them, so the offer that
+         does not leave the site is the same anchor it always was. */
+      if (line.ask.target) sayText.setAttribute("target", line.ask.target);
+      if (line.ask.rel) sayText.setAttribute("rel", line.ask.rel);
     }
 
     sayUntil = now + (line.ask ? pace.askHold : pace.sayHold);
@@ -955,6 +1019,11 @@ function start(
     if (!sayEl.classList.contains("is-ask")) return;
     if (root.activeElement === sayText) sayText.blur();
     sayText.removeAttribute("href");
+    /* All three, because they went on together. A `target` left on an anchor
+       with no `href` is inert and invisible, and it is also the sort of residue
+       that makes the next reader of this element wonder what it is for. */
+    sayText.removeAttribute("target");
+    sayText.removeAttribute("rel");
     sayEl.setAttribute("aria-hidden", "true");
     sayEl.classList.remove("is-ask");
   };
