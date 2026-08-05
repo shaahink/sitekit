@@ -18,7 +18,24 @@
    map, by specifier. Adding an entry point without adding it here is possible;
    adding one that does not resolve is not. */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+/** **A bigger budget than the 5 s default, and it is not a measurement being
+    weakened.** What this file asserts is reachability: does the specifier
+    resolve, and does it carry the names a site writes. The clock is no part of
+    that claim. What the clock actually measures here is the toolchain — the
+    first `import` of a subpath transforms its whole graph, and `cms` is the
+    largest in the kit at about two seconds on an idle machine.
+
+    That is bug #43, filed in session 27 as "vitest has an intermittent failure
+    under machine load (1 in 5 runs)" with no cause attached. The cause is this
+    line and its twin in `bin.test.ts`. Reproduced deliberately by running the
+    suite with sixteen busy cores on an eight-core machine: `Test timed out in
+    5000ms`, always on the heaviest specifier, never on an assertion — the same
+    988 tests pass on an idle one. A limit that a quiet machine clears and a
+    busy machine trips is measuring the machine, so raising it removes a false
+    red and forbids nothing this file was written to catch. */
+vi.setConfig({ testTimeout: 30_000 });
 
 /* Each entry point, with something from it that a site actually names. Kept
    deliberately short — this is a reachability check, not an API snapshot, and
