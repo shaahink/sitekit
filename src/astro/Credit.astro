@@ -1,0 +1,152 @@
+---
+/* The footer credit, and optionally the character standing on it.
+   ---------------------------------------------------------------------------
+   `creditsFor()` has emitted the fleet's credit from one place since 0.23.0,
+   which is the property this component is built on rather than around: the
+   sentence, the anchor and the JSON-LD are unchanged and still come from
+   `../credits/index.ts`. What is new is one optional element beside them and a
+   script that mounts an anchored companion on it.
+
+   **A component rather than a hook attribute plus a per-site import line.**
+   The alternative was `creditsFor()` gaining a `data-` hook and each footer
+   adding its own `<script>` — which works, and makes every later improvement
+   to the mount four commits in four repos. Here a site's whole adoption is one
+   import and one element, and the next change to any of this is a version bump
+   with no site commit at all. It is available because every site in the fleet
+   is Astro, which §8.1 measured rather than assumed.
+
+   **Astro hashes this file's own `<script>` and `<style>` into the adopting
+   site's CSP.** That is the same mechanism `edit.astro` relies on and the
+   reason the component can carry both without any site having to learn a hash
+   or loosen a directive.
+
+   **A bump alone changes nothing.** Without `companion` this renders exactly
+   what `creditsFor()` returns and nothing else — same string, same function —
+   so the release is safe to take on the sites that have not looked at this
+   yet, and the character arrives only where somebody wrote the word. Session
+   26's leaderboard shipped answering `{ configured: false }` for the same
+   reason.
+
+   Two rulings in `../credits/index.ts` survive here and are worth restating
+   because this is where somebody would break them:
+
+   - **The anchor opens in a new tab.** A visitor who taps a footer credit has
+     not decided to leave, and taking them off a client's site is a cost the
+     client pays for our benefit. That holds for the sentence the companion
+     says as much as for the credit itself, which is why the offer below is
+     given a `target` and a `rel` rather than a bare href.
+   - **`noreferrer` is deliberately absent.** The referrer is how we learn
+     which client's site sent somebody. Do not add it while improving a link. */
+
+import { creditHref, creditLine, creditsFor, creditsJsonLd } from "@shaahink/sitekit/credits";
+import type { CreditLineOptions } from "@shaahink/sitekit/credits";
+
+export interface Props extends CreditLineOptions {
+  /** Bring the character. Absent on every site until its owner has seen one. */
+  companion?: boolean | undefined;
+  /** **His one line, and it is content.** A studio's offer in a client's
+      footer is copy somebody has to approve, so it is a prop with a default
+      rather than a constant in a script — a site that wants different words
+      writes them, and nobody edits the kit to change a sentence.
+
+      The register is the fleet's own: the offer made once, and then quiet. */
+  say?: string | undefined;
+}
+
+const { companion = false, say = "He made this one. Want one?", ...credit } = Astro.props;
+
+/* The visible sentence, and the machine-readable claim under it. Split only on
+   the companion path, so the ordinary one is the single call every footer in
+   the fleet already makes and cannot drift from it. */
+const line = companion ? creditLine(credit) : creditsFor(credit);
+
+/* Where the offer points: the same href the credit does, through the same
+   resolver, so the sentence and the name under it cannot disagree about which
+   site they mean — including on the sites that pass no `href` at all and take
+   the studio's own. */
+const href = creditHref(credit);
+---
+
+{
+  companion ? (
+    <span class="sk-credit-walk">
+      <Fragment set:html={line} />
+      {/* Empty, and it stays empty until the browser is idle: everything
+          inside it is built by the deferred chunk into a shadow root, so a
+          reader who never reaches the footer, who asked for reduced motion, or
+          whose network dropped the chunk gets the credit exactly as it is
+          without him. No `aria-hidden` here — the figure sets its own, and
+          hiding the host would silence the one line that is announced. */}
+      <span class="sk-credit-mate" data-sk-credit-mate data-sk-say={say} data-sk-to={href} />
+      <Fragment set:html={creditsJsonLd(credit)} />
+    </span>
+  ) : (
+    <Fragment set:html={line} />
+  )
+}
+
+<style>
+  /* The whole of the layout this component owns, and it owns it because the
+     alternative is every adopting site pasting the same two declarations —
+     which is the thing §8.2 says would mean the extraction is wrong.
+
+     `position: relative` is what makes the credit his floor: the mount is
+     absolutely positioned from inside its shadow root and resolves against the
+     nearest positioned ancestor, so without this he would stand on the page.
+     `inline-block` because those insets are percentages of that box and an
+     inline box's is the union of its line fragments — correct on one line and
+     surprising on two.
+
+     Nothing else. No colour, no size, no font: he is drawn in `currentColor`
+     and measured in `em` off this line, so a client's own footer styling is
+     the whole of his palette and his scale. */
+  .sk-credit-walk {
+    position: relative;
+    display: inline-block;
+  }
+</style>
+
+<script>
+  /* **`mountMotion` is the only static import, and that is the byte budget.**
+     Rule 1 of `motion/boot.ts`: `start` is not called — and therefore whatever
+     it dynamically imports is not fetched — until `load` has fired and the
+     browser has reported itself idle. So the figure, the rig, the lines and
+     every frame of behaviour arrive after first idle, and a client page's
+     transferred bytes before it are the boot contract and nothing else.
+     Importing `companionAt` at the top of this file would have compiled,
+     worked, looked identical in a browser, and put the whole module on the
+     critical path of every page of somebody's site.
+
+     `companionAt` rather than `mountCompanion` because the waiting has already
+     happened here; see its own comment for what the doubled version costs. */
+  import { mountMotion } from "@shaahink/sitekit/motion";
+
+  for (const host of document.querySelectorAll<HTMLElement>("[data-sk-credit-mate]")) {
+    const say = host.dataset.skSay ?? "";
+    const to = host.dataset.skTo ?? "";
+    if (!say) continue;
+
+    mountMotion(host, async () => {
+      const { companionAt } = await import("@shaahink/sitekit/companion");
+      return companionAt(host, {
+        /* One line, at the host's own stage — in `anchor` placement the stage
+           list is the host itself and its key is its `id`, which is the empty
+           string on an element that has none. Reading it off the element
+           rather than writing `""` here keeps that true if a site ever gives
+           the mount an id.
+
+           `ANCHOR_PACE` does the rest: cap one, gap two minutes, no landing
+           asides, and `askAfter: 0` because the offer is the only thing he has
+           to say. A new tab and `author noopener`, for the reason at the top of
+           this file. */
+        lines: [
+          {
+            at: host.id,
+            text: say,
+            ask: to ? { href: to, target: "_blank", rel: "author noopener" } : null
+          }
+        ]
+      });
+    });
+  }
+</script>

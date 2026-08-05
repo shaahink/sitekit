@@ -374,6 +374,70 @@ describe("mountCompanion — placement", () => {
     Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
   });
 
+  /** The offer's anchor, once he has said it. Reached through the shadow root
+      because that is the only way in — which is the point of the shadow root. */
+  const offer = (host: HTMLElement) => host.shadowRoot!.querySelector(".say")!;
+
+  /** Land him, then let him speak. Anchored, `askAfter` is 0 and the offer is
+      the only line he has, so the first thing he says is it. */
+  async function saidIt(host: HTMLElement, ask: unknown) {
+    host.getBoundingClientRect = () => ({ top: 300, bottom: 340 }) as DOMRect;
+    mountCompanion(host, {
+      placement: { mode: "anchor" },
+      lines: [{ at: "", text: "He made this one. Want one?", ask } as never]
+    });
+    await flush();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    expect(runUntil(() => offer(host).classList.contains("is-ask"))).toBe(true);
+    return offer(host).querySelector("a")!;
+  }
+
+  it("the offer opens a new tab when the destination asks for one", async () => {
+    /* §9.1, and it is the whole reason `ask` grew a long form. This sentence
+       lands in somebody else's footer: a visitor who taps a credit has not
+       decided to leave, and navigating them off the client's site to satisfy a
+       curiosity is a cost the client pays for our benefit. */
+    const { host } = page();
+    const a = await saidIt(host, {
+      href: "https://sk-works.vercel.app",
+      target: "_blank",
+      rel: "author noopener"
+    });
+    expect(a.getAttribute("href")).toBe("https://sk-works.vercel.app");
+    expect(a.getAttribute("target")).toBe("_blank");
+    expect(a.getAttribute("rel")).toBe("author noopener");
+    /* Deliberately absent: the referrer is how the far end of an acquisition
+       link learns which site sent somebody. */
+    expect(a.getAttribute("rel")).not.toContain("noreferrer");
+  });
+
+  it("and takes all three off with the sentence, not just the href", async () => {
+    /* An offer left armed is an invisible anchor lying across a footer. The
+       href was always removed; `target` and `rel` went on together with it and
+       come off the same way. */
+    const { host } = page();
+    const a = await saidIt(host, {
+      href: "https://sk-works.vercel.app",
+      target: "_blank",
+      rel: "author noopener"
+    });
+    expect(runUntil(() => !offer(host).classList.contains("is-ask"), 20000)).toBe(true);
+    expect(a.hasAttribute("href")).toBe(false);
+    expect(a.hasAttribute("target")).toBe(false);
+    expect(a.hasAttribute("rel")).toBe(false);
+  });
+
+  it("a bare href is still a bare href", async () => {
+    /* The string form is what `sk-studio`'s `#contact` passes and it must not
+       have quietly grown a new tab: an offer that stays on the site it was made
+       on is the common case and the one the site owner wrote. */
+    const { host } = page();
+    const a = await saidIt(host, "#contact");
+    expect(a.getAttribute("href")).toBe("#contact");
+    expect(a.hasAttribute("target")).toBe(false);
+    expect(a.hasAttribute("rel")).toBe(false);
+  });
+
   it("anchored, the cadence is a signature's and not a character's", () => {
     /* One line, on an interval far longer than a page's own, and no landing
        aside at all — a joke about knees in a client's footer is a joke in

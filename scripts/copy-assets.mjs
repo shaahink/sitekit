@@ -23,6 +23,7 @@ const assets = [
   ["src/editor/editor.css", "dist/editor/editor.css"],
   ["src/editor/inline.css", "dist/editor/inline.css"],
   ["src/astro/edit.astro", "dist/astro/edit.astro"],
+  ["src/astro/Credit.astro", "dist/astro/Credit.astro"],
   ["src/astro/virtual.d.ts", "dist/astro/virtual.d.ts"]
 ];
 
