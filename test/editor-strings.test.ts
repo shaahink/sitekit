@@ -120,9 +120,17 @@ describe("the two tables the audit exists because of", () => {
     expect(editorLocales.fa!.changes).toBe(editorLocales.fa!.change);
   });
 
-  it("keeps the studio's name where the request goes to a person", () => {
-    for (const table of Object.values(editorLocales)) {
-      expect(table.homeRequestNote.toLowerCase()).toMatch(/shahin|شاهین/);
+  /* This read the other way round until 0.25.0 — it required the owner's name
+     in `homeRequestNote`, which is the one place the editor broke its own rule
+     that nothing here names a studio, an owner or a site. The sentence's job is
+     to say a person reads the request, and "the studio" does that without
+     telling a client's owner a stranger's first name. Widened past the one key
+     because the rule was never about that key. */
+  it("names nobody, in any table", () => {
+    for (const [locale, table] of Object.entries(editorLocales)) {
+      for (const [key, value] of Object.entries(table)) {
+        expect(value.toLowerCase(), `${locale}.${key}`).not.toMatch(/shahin|شاهین/);
+      }
     }
   });
 
