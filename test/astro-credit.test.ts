@@ -109,6 +109,20 @@ describe("Credit.astro", () => {
     expect(source).not.toMatch(/import\s*{[^}]*}\s*from\s*"@shaahink\/sitekit\/companion"/);
   });
 
+  it("an empty say is a silent companion, not a skipped mount", () => {
+    /* The behaviour is proved in `motion-companion.test.ts`, where an empty
+       script can actually be driven for a minute; what is guarded here is the
+       one line of this file that used to make it unreachable. `if (!say)
+       continue` meant a site could not look at the character without first
+       publishing a sentence into its own footer — and the sentence is copy
+       somebody has to approve, so the two decisions were welded together for no
+       reason. Asserted as the absence of the early exit *and* the presence of
+       the empty-array branch, because either alone reads as a tidy-up. */
+    expect(source).not.toMatch(/if\s*\(!say\)\s*continue/);
+    expect(source).toMatch(/lines:\s*say\s*\?/);
+    expect(source).toMatch(/:\s*\[\]/);
+  });
+
   it("sends the offer to a new tab, and keeps the referrer", () => {
     expect(source).toContain('target: "_blank"');
     expect(source).toContain('rel: "author noopener"');

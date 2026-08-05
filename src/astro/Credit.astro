@@ -49,7 +49,15 @@ export interface Props extends CreditLineOptions {
       rather than a constant in a script — a site that wants different words
       writes them, and nobody edits the kit to change a sentence.
 
-      The register is the fleet's own: the offer made once, and then quiet. */
+      The register is the fleet's own: the offer made once, and then quiet.
+
+      **`say=""` is a supported value, and it is not the same as no companion.**
+      He mounts, stands on the credit and says nothing. That is the state a site
+      is in while its owner is looking at the character and has not yet approved
+      the words — which is a real state and was an unreachable one until 0.27.0,
+      because the script below treated an empty string as "no mount" and the
+      only way to see him was to ship the sentence with him. `companion` decides
+      whether he is there; this decides whether he speaks. */
   say?: string | undefined;
 }
 
@@ -124,7 +132,6 @@ const href = creditHref(credit);
   for (const host of document.querySelectorAll<HTMLElement>("[data-sk-credit-mate]")) {
     const say = host.dataset.skSay ?? "";
     const to = host.dataset.skTo ?? "";
-    if (!say) continue;
 
     mountMotion(host, async () => {
       const { companionAt } = await import("@shaahink/sitekit/companion");
@@ -138,14 +145,25 @@ const href = creditHref(credit);
            `ANCHOR_PACE` does the rest: cap one, gap two minutes, no landing
            asides, and `askAfter: 0` because the offer is the only thing he has
            to say. A new tab and `author noopener`, for the reason at the top of
-           this file. */
-        lines: [
-          {
-            at: host.id,
-            text: say,
-            ask: to ? { href: to, target: "_blank", rel: "author noopener" } : null
-          }
-        ]
+           this file.
+
+           **An empty `say` is an empty script, not a skipped mount**, and the
+           difference is the whole of what a site owner is shown while he
+           decides on the words. `companionAt` draws the figure off `rig` and
+           reads `lines` only for what comes out of his mouth, so the empty
+           array is a character standing on the credit in silence — the same
+           state `draw()` already puts him in on a stage whose lines are used
+           up, and it makes no new one. Presence is `companion`, one element
+           up: no element, no loop, no chunk. */
+        lines: say
+          ? [
+              {
+                at: host.id,
+                text: say,
+                ask: to ? { href: to, target: "_blank", rel: "author noopener" } : null
+              }
+            ]
+          : []
       });
     });
   }

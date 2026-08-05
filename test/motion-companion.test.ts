@@ -22,7 +22,7 @@
       reusability and a hope. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mountCompanion, skFigure, PACE, ANCHOR_PACE } from "../src/motion/companion.js";
+import { mountCompanion, companionAt, skFigure, PACE, ANCHOR_PACE } from "../src/motion/companion.js";
 import type { CompanionRig } from "../src/motion/companion.js";
 import { stance, emit, flip, PARTS, GROUND, VBH } from "../src/motion/figure.js";
 
@@ -190,6 +190,36 @@ describe("mountCompanion — the shadow root", () => {
        for the seconds it is up. */
     expect(root.querySelector(".say")!.getAttribute("aria-hidden")).toBe("true");
     expect(root.querySelector(".say")!.getAttribute("aria-live")).toBe("polite");
+  });
+});
+
+describe("companionAt — a character with nothing to say", () => {
+  /** **The state a site is in while its owner is deciding on the words.** He
+      stands on the credit and says nothing, which has to be reachable without
+      first shipping a sentence into somebody else's footer — and until 0.27.0
+      it was not: `Credit.astro` read an empty `say` as "no companion" and
+      skipped the mount, so the only way to look at the character was to publish
+      copy nobody had approved. `companion` is presence, `say` is speech, and
+      these are the two assertions that keep them separable. */
+  it("draws every mark, and never speaks", async () => {
+    const { host } = page();
+    companionAt(host, { lines: [] });
+    await flush();
+
+    const root = host.shadowRoot!;
+    /* In full. The drawing comes off `rig` and `lines` has no part in it, so a
+       silent companion is not a smaller or a simpler one. */
+    expect(root.querySelectorAll("svg > path").length).toBe(PARTS.length);
+
+    /* And nothing ever arrives in the one element every line and the offer
+       alike are written into — driven far past `ANCHOR_PACE`'s `askAfter: 0`,
+       which is the setting that would have spoken at the first opportunity if
+       an empty script still had one. */
+    const text = root.querySelector("a.text")!;
+    run(60_000);
+    expect(text.textContent).toBe("");
+    expect(text.getAttribute("href")).toBeNull();
+    expect(root.querySelector(".say")!.getAttribute("aria-hidden")).toBe("true");
   });
 });
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
@@ -26,6 +26,14 @@ import { join, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+
+/** The other half of bug #43; `exports.test.ts` carries the argument and the
+    reproduction. Here the cost is not a transform but a process: every case
+    below runs the published bin through a real `spawnSync`, which is the whole
+    reason these tests are worth having — a bin that a site's CI invokes is not
+    proved by importing it — and a cold Node start on a loaded machine is not a
+    five-second operation by nature. */
+vi.setConfig({ testTimeout: 30_000 });
 
 describe("published bins", () => {
   const entries = Object.entries(pkg.bin as Record<string, string>);
