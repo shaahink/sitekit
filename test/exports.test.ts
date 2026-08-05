@@ -32,7 +32,9 @@ const SURFACE: [string, string[]][] = [
   ["@shaahink/sitekit/credits", ["creditLine", "creditsFor", "creditsAnchor", "creditsJsonLd"]],
   ["@shaahink/sitekit/version", ["KIT_VERSION"]],
   ["@shaahink/sitekit/feedback", ["createFeedbackHandler"]],
-  ["@shaahink/sitekit/widget", ["refine", "shrink", "squash"]]
+  ["@shaahink/sitekit/widget", ["refine", "shrink", "squash"]],
+  ["@shaahink/sitekit/companion", ["mountCompanion", "skFigure", "PACE"]],
+  ["@shaahink/sitekit/motion/figure", ["createFigure", "stance", "emit", "flip", "PARTS"]]
 ];
 
 describe("what a site can import", () => {
