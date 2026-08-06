@@ -378,7 +378,22 @@ export const ANCHOR_PACE: Partial<CompanionPace> = {
   sayGap: 120000,
   aside: 0,
   askAfter: 0,
-  flipGap: 60000
+  flipGap: 60000,
+  /* **A third and two thirds, and the number is a bound rather than a taste.**
+     Anchored, his containing block is a yard the site reserved for him beside
+     whatever he is a footnote to, and the whole point of the yard is that he
+     never paces back over it. He is placed by his *centre* and drawn either
+     side of it, so his box stays inside a yard of `k` of his own widths only
+     while the band starts no earlier than `1 / 2k`. `Credit.astro` reserves
+     1.5, which makes the earliest honest walkMin exactly a third — and the
+     roaming default of 0.14 would have put a third of him back on the words at
+     the near end of every pace.
+
+     Both halves of that arithmetic are commented in both files on purpose: they
+     are two numbers in two repositories' worth of distance from each other that
+     are only correct together. */
+  walkMin: 1 / 3,
+  walkMax: 2 / 3
 };
 
 export interface CompanionOptions {
@@ -919,12 +934,42 @@ function start(
     if (sayW <= 0 || sayH <= 0) return;
 
     const page = document.documentElement.clientWidth;
-    const speaker = x * page;
+
+    /* **Where he is, measured off his own box, rather than `x` × the viewport.**
+       ---------------------------------------------------------------------
+       `x` is a fraction of *his containing block*, and this line spent two
+       releases treating it as a fraction of the document. Roaming those are the
+       same number, because a roaming host is stretched across the page — which
+       is exactly why the mistake survived being looked at. Anchored they are
+       not related at all: his containing block is a yard a few em wide in
+       somebody's footer, so `x` × the viewport put his supposed position in the
+       middle of the screen, and every clamp below — which edge he is near, how
+       much room the sentence has, whether the facing side survives — was solved
+       for a speaker who was not there. The visible symptom is a footer sentence
+       nudged a long way off the character it belongs to.
+
+       A rect is the honest answer in both placements and it costs nothing that
+       was not already being spent: `offsetWidth` on the line below was a forced
+       layout every frame the sentence is up, and this replaces it rather than
+       joining it.
+
+       **A rect is physical and everything downstream is logical**, which is the
+       one thing this module has to do by hand. `left` is the reader's left on
+       both a French page and a Farsi one; `--say-nudge` is spent on
+       `inset-inline-start`, and the clamp reasons about *near* and *far* edges
+       rather than left and right ones. So the rect is converted once, here, and
+       the direction is read rather than assumed — the module still never
+       decides which way forward is, it only asks the page which way it already
+       went. */
+    const box = host.getBoundingClientRect();
+    const half = box.width / 2;
+    const speaker =
+      getComputedStyle(host).direction === "rtl" ? page - box.right + half : box.left + half;
+
     /* Where the sheet puts it at a nudge of nought: centred on his anchor,
        which is the middle of his box. Everything below is measured off that,
        because the nudge is a correction to it and not a position. */
     const centred = speaker - sayW / 2;
-    const half = host.offsetWidth / 2;
     /* When the sentence is wider than the screen there is nothing to clamp it
        into; `max` keeps the range from inverting. */
     const near = pace.sayEdge;
@@ -939,12 +984,31 @@ function start(
     sayEl.style.setProperty("--say-nudge", `${startX - centred}px`);
 
     if (clear) {
-      /* How far down his box his face is and how tall the sentence is: the two
-         numbers that centre it on him, both in pixels and both from here,
-         because a percentage inset resolves against *his* box and can express
-         neither. `--say-over` is the gap the old placement left above his head,
-         switched off because there is no head underneath it any more. */
-      sayEl.style.setProperty("--say-face", `${rig.face * host.offsetHeight}px`);
+      /* How far down his box the sentence is centred and how tall the sentence
+         is: the two numbers that hang it beside him, both in pixels and both
+         from here, because a percentage inset resolves against *his* box and
+         can express neither. `--say-over` is the gap the old placement left
+         above his head, switched off because there is no head underneath it any
+         more.
+
+         **Roaming, it is centred on his feet rather than on his face**, and
+         that is the second half of the owner's note about the sentence being
+         noisy. He stands on the *top edge of a section*, so the band level with
+         his boots is the gutter between two of them — the one horizontal strip
+         on a page that is whitespace on both sides of it, because the section
+         above has bottom padding and the one below has top padding. His face is
+         about three quarters of his own height up from that edge, which is
+         three quarters of the way back into the previous section's content, and
+         on a portfolio that content is regularly a photograph. Same sentence,
+         same side, same clamp; a few em lower, into the seam.
+
+         **Anchored it stays at his face**, because there is no seam under an
+         anchored companion — his floor is the credit's own baseline and the
+         thing level with his boots is the sentence *{sk} made this*. The one
+         placement where the words are what he is standing on is the one
+         placement where the sentence must not come down to them. */
+      const height = box.height || host.offsetHeight;
+      sayEl.style.setProperty("--say-face", `${(anchored ? rig.face : 1) * height}px`);
       sayEl.style.setProperty("--say-h", `${sayH}px`);
       sayEl.style.setProperty("--say-over", "0px");
     } else {
