@@ -44,6 +44,18 @@ import type { CreditLineOptions } from "@shaahink/sitekit/credits";
 export interface Props extends CreditLineOptions {
   /** Bring the character. Absent on every site until its owner has seen one. */
   companion?: boolean | undefined;
+  /** **Which end of the credit he stands at**, and it is spelled logically
+      because half the fleet reads right to left: `"end"` puts him after the
+      sentence, which is the physical right of an English footer and the
+      physical left of a Farsi one.
+
+      It is a prop rather than a constant because the two ends are not
+      interchangeable on a real footer — a credit that already sits hard against
+      the inline-end edge of its container has no room on that side, and the
+      site is the only thing that knows. It decides *markup order* and nothing
+      else: the yard below is an ordinary inline box, so putting it before the
+      sentence is the whole of standing him at the other end. */
+  side?: "start" | "end" | undefined;
   /** **His one line, and it is content.** A studio's offer in a client's
       footer is copy somebody has to approve, so it is a prop with a default
       rather than a constant in a script — a site that wants different words
@@ -61,7 +73,12 @@ export interface Props extends CreditLineOptions {
   say?: string | undefined;
 }
 
-const { companion = false, say = "He made this one. Want one?", ...credit } = Astro.props;
+const {
+  companion = false,
+  side = "end",
+  say = "He made this one. Want one?",
+  ...credit
+} = Astro.props;
 
 /* The visible sentence, and the machine-readable claim under it. Split only on
    the companion path, so the ordinary one is the single call every footer in
@@ -78,14 +95,21 @@ const href = creditHref(credit);
 {
   companion ? (
     <span class="sk-credit-walk">
+      {side === "start" && <span class="sk-credit-yard sk-credit-yard--start">
+        <span class="sk-credit-mate" data-sk-credit-mate data-sk-say={say} data-sk-to={href} />
+      </span>}
       <Fragment set:html={line} />
-      {/* Empty, and it stays empty until the browser is idle: everything
-          inside it is built by the deferred chunk into a shadow root, so a
-          reader who never reaches the footer, who asked for reduced motion, or
-          whose network dropped the chunk gets the credit exactly as it is
-          without him. No `aria-hidden` here — the figure sets its own, and
-          hiding the host would silence the one line that is announced. */}
-      <span class="sk-credit-mate" data-sk-credit-mate data-sk-say={say} data-sk-to={href} />
+      {/* The yard is empty and stays empty until the browser is idle:
+          everything inside it is built by the deferred chunk into a shadow
+          root, so a reader who never reaches the footer, who asked for reduced
+          motion, or whose network dropped the chunk gets the credit exactly as
+          it is without him — and, because the yard's width is declared in CSS
+          rather than discovered when he arrives, gets it at the same width
+          too. No `aria-hidden` here: the figure sets its own, and hiding the
+          host would silence the one line that is announced. */}
+      {side === "end" && <span class="sk-credit-yard sk-credit-yard--end">
+        <span class="sk-credit-mate" data-sk-credit-mate data-sk-say={say} data-sk-to={href} />
+      </span>}
       <Fragment set:html={creditsJsonLd(credit)} />
     </span>
   ) : (
@@ -94,23 +118,77 @@ const href = creditHref(credit);
 }
 
 <style>
-  /* The whole of the layout this component owns, and it owns it because the
-     alternative is every adopting site pasting the same two declarations —
-     which is the thing §8.2 says would mean the extraction is wrong.
+  /* **He stands beside the credit, not on it, and the yard is what changed.**
+     ---------------------------------------------------------------------------
+     Until 0.28.0 the mount resolved against `.sk-credit-walk` — the box around
+     the sentence itself — which made the credit his floor in the literal sense:
+     `inset-block-end: calc(100% - …)` stood him on that box's *top* edge, so he
+     was drawn in the band directly above the words, pacing across 14%–80% of
+     their width. On a footer that is a figure hovering over *{sk} made this*
+     with whatever sits above the footer behind him, and it was the owner's
+     report: not quite right on top of the credit, put him to one side.
 
-     `position: relative` is what makes the credit his floor: the mount is
-     absolutely positioned from inside its shadow root and resolves against the
-     nearest positioned ancestor, so without this he would stand on the page.
-     `inline-block` because those insets are percentages of that box and an
-     inline box's is the union of its line fragments — correct on one line and
-     surprising on two.
+     So he is given a yard: an ordinary empty inline box **beside** the
+     sentence, and the mount resolves against that instead. Four properties do
+     the whole of it and each is load-bearing.
+
+     `position: relative` makes the yard — rather than the credit — the nearest
+     positioned ancestor, which is what the kit's `anchor` placement means by
+     *the host's own containing block*. That sentence was in `companion.ts`
+     before this component existed and was not true of it; it is now.
+
+     `block-size: 0` is the trick and it is worth spelling out. The mount stands
+     on its containing block's block-start edge, and a box with no height has
+     that edge in the same place as its block-end one — so a zero-height yard
+     puts his feet exactly on its bottom margin edge. An empty inline-block's
+     baseline *is* its bottom margin edge, so that bottom edge is the text
+     baseline of the credit line: he stands on the same floor the words stand
+     on, at the same size relative to them, and the line box is not one pixel
+     taller for his being there. The drop he arrives with still works unchanged
+     — it is a negative offset from that floor and he falls onto it.
+
+     `inline-size` is the room, and it is declared here rather than measured
+     because a width that arrived with the deferred chunk would reflow somebody's
+     footer at idle. `3.4em` is `--sk-mate-h`, the height the kit draws an
+     anchored companion at; `0.8333` is his aspect — the figure's viewBox is 60
+     wide by 72 tall — and it is a *fallback*, so a site that hands the kit a
+     rig of its own gets that rig's real aspect the moment the shadow root sets
+     the property and the yard resizes to match.
+
+     **The 1.5 is a bound rather than a taste**, and it is the same number as
+     `ANCHOR_PACE`'s walk band. He is placed by his centre and drawn either side
+     of it, so keeping his box inside a yard of `k` widths needs the band to
+     start no earlier than `1 / 2k`: at `k = 1.5` that is a third, which is
+     exactly what `walkMin` and `walkMax` are set to. Widen one without the
+     other and he paces out of his yard and back over the words — which is the
+     bug this whole file is fixing, so the two numbers are commented in both
+     places.
+
+     `.sk-credit-walk` is no longer positioned and no longer an inline-block.
+     Both existed only to be his containing block, and an inline-block credit
+     cannot break across two lines the way an inline one can — so dropping them
+     takes a constraint off the client footers rather than adding one.
 
      Nothing else. No colour, no size, no font: he is drawn in `currentColor`
      and measured in `em` off this line, so a client's own footer styling is
      the whole of his palette and his scale. */
-  .sk-credit-walk {
+  .sk-credit-yard {
     position: relative;
     display: inline-block;
+    vertical-align: baseline;
+    block-size: 0;
+    inline-size: calc(var(--sk-mate-h, 3.4em) * var(--sk-mate-aspect, 0.8333) * 1.5);
+  }
+
+  /* The daylight between him and the sentence, on whichever side he is. A
+     margin rather than padding on the yard, because padding would be inside the
+     box his percentage insets are resolved against and would put the two
+     numbers above out by the width of the gap. */
+  .sk-credit-yard--end {
+    margin-inline-start: 0.3em;
+  }
+  .sk-credit-yard--start {
+    margin-inline-end: 0.3em;
   }
 </style>
 

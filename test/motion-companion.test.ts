@@ -21,6 +21,9 @@
       the shadow root draws *its* marks — which is the difference between
       reusability and a hope. */
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mountCompanion, companionAt, skFigure, PACE, ANCHOR_PACE } from "../src/motion/companion.js";
 import type { CompanionRig } from "../src/motion/companion.js";
@@ -475,6 +478,188 @@ describe("mountCompanion — placement", () => {
     expect(ANCHOR_PACE.sayCap).toBe(1);
     expect(ANCHOR_PACE.aside).toBe(0);
     expect(ANCHOR_PACE.sayGap).toBeGreaterThan(PACE.sayGap);
+  });
+});
+
+/* --- where he stands, and where the sentence goes ------------------------- */
+
+describe("the sentence is placed off his own box", () => {
+  /** **A phone, and the width is the whole reason the numbers are these.**
+      A footer companion on a desktop is forgiving: the sentence has room on
+      both sides of him, the clamp never bites, and the offset from *wherever
+      the module thinks he is* comes out the same whether it thinks right or
+      wrong — so a desktop-width fixture passes on both arithmetics and proves
+      nothing. It is at 320 that the two part company, because there the
+      sentence is half the screen and the clamp is doing real work: solved for a
+      speaker in the middle of the page it puts the words off the left edge and
+      across the drawing, and solved for the speaker who is actually there it
+      puts them beside him and on the screen.
+
+      He is at 40–80, which is where a credit's yard sits in a footer whose
+      content is inline-start aligned. */
+  const PAGE = 320;
+  const LEFT = 40;
+  const W = 40;
+  const SAY_W = 160;
+  const SAY_H = 40;
+  const CENTRE = LEFT + W / 2;
+
+  afterEach(() => {
+    /* The override is on `documentElement` and would otherwise be the page
+       width every test after this one measures against. */
+    Reflect.deleteProperty(document.documentElement, "clientWidth");
+  });
+
+  async function speaks(mode: "anchor" | "roam") {
+    const { host } = page();
+    host.getBoundingClientRect = () =>
+      ({
+        top: 300,
+        bottom: 340,
+        left: LEFT,
+        right: LEFT + W,
+        width: W,
+        height: 40
+      }) as DOMRect;
+    Object.defineProperty(document.documentElement, "clientWidth", {
+      value: PAGE,
+      configurable: true
+    });
+
+    mountCompanion(host, {
+      placement:
+        mode === "anchor" ? { mode: "anchor" } : { mode: "roam", stages: "[data-mate-stage]" },
+      lines: [{ at: mode === "anchor" ? "" : "work", text: "He made this one. Want one?" }]
+    });
+    await flush();
+
+    /* happy-dom lays nothing out, so the sentence measures zero and `placeSay`
+       returns before it decides anything — which is why this whole path was
+       uncovered. Given a box it behaves exactly as it does in a browser. */
+    const say = host.shadowRoot!.querySelector<HTMLElement>(".say")!;
+    Object.defineProperty(say, "offsetWidth", { value: SAY_W, configurable: true });
+    Object.defineProperty(say, "offsetHeight", { value: SAY_H, configurable: true });
+
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    expect(runUntil(() => say.classList.contains("is-up"))).toBe(true);
+    return say;
+  }
+
+  it("anchored, it clears him instead of landing across him", async () => {
+    /* **The regression this release exists for, stated as geometry.**
+       `placeSay` used to take his position as `x` × the viewport. Roaming that
+       is true, because a roaming host is stretched across the page; anchored it
+       is not related to anything — his containing block is a yard a few em wide
+       in a footer, so a fraction of it read as a fraction of the screen put the
+       supposed speaker hundreds of pixels from the real one and solved every
+       clamp for him. At these numbers the old arithmetic put the sentence's
+       start at 728 with the character occupying 700 to 740: the sentence sat
+       across the drawing, which is what a reader saw.
+
+       Asserted as the module's own promise — the sentence clears his box on one
+       side or the other — rather than as the nudge, because the nudge is an
+       offset from a centre and it was the centre that was wrong. */
+    const say = await speaks("anchor");
+    const nudge = parseFloat(say.style.getPropertyValue("--say-nudge"));
+    expect(Number.isFinite(nudge)).toBe(true);
+
+    /* The sheet centres the sentence on him at a nudge of nought, so its start
+       edge is his centre, less half a sentence, plus the nudge. */
+    const start = CENTRE - SAY_W / 2 + nudge;
+    const clearsEnd = start >= LEFT + W;
+    const clearsStart = start + SAY_W <= LEFT;
+    expect(clearsEnd || clearsStart).toBe(true);
+  });
+
+  it("and stays on the screen while it does it", async () => {
+    /* The clamp is the half that was already right, and it must survive being
+       given a speaker who is really near an edge. */
+    const say = await speaks("anchor");
+    const nudge = parseFloat(say.style.getPropertyValue("--say-nudge"));
+    const start = CENTRE - SAY_W / 2 + nudge;
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(start + SAY_W).toBeLessThanOrEqual(PAGE);
+  });
+
+  it("roaming, it sits level with his boots and not with his face", async () => {
+    /* The other half of the owner's note. He stands on the *top edge of a
+       section*, so the band level with his feet is the gutter between two of
+       them — whitespace on both sides, because the section above has bottom
+       padding and the one below has top padding. His face is three quarters of
+       his own height up from that edge, which is three quarters of the way back
+       into the previous section's content, and on a portfolio that content is
+       regularly a photograph.
+
+       `--say-face` is how far down his box the sentence is centred, so the
+       whole of the change is that number becoming his full height. */
+    const say = await speaks("roam");
+    expect(say.style.getPropertyValue("--say-face")).toBe("40px");
+  });
+
+  it("anchored, it stays at his face, because his floor is the credit", async () => {
+    /* And this is why the line above is not simply "lower it". An anchored
+       companion has no seam under him: he stands on the credit's own baseline,
+       and the thing level with his boots is the sentence *{sk} made this*. */
+    const say = await speaks("anchor");
+    const face = parseFloat(say.style.getPropertyValue("--say-face"));
+    expect(face).toBeGreaterThan(0);
+    expect(face).toBeLessThan(40);
+  });
+});
+
+describe("the yard, and two numbers that are only correct together", () => {
+  /* `fileURLToPath` rather than `new URL(…, import.meta.url)`: this file runs
+     under happy-dom, whose `URL` is the DOM's and which `readFileSync` refuses
+     with "the URL must be of scheme file". */
+  const credit = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), "../src/astro/Credit.astro"),
+    "utf8"
+  );
+
+  it("Credit.astro reserves him a yard beside the words rather than over them", () => {
+    /* The three declarations that move him off the credit, each of which does
+       something the other two cannot. Positioned, because `anchor` placement
+       means *the host's own containing block* and until 0.28.0 that was the box
+       around the sentence. Zero-height, because a box with no height has its
+       block-start edge — the edge he stands on — in the same place as its
+       bottom margin edge, which for an empty inline-block is the credit's text
+       baseline: he stands on the same floor the words do and the line box does
+       not grow. And a declared width, because a width that arrived with the
+       deferred chunk would reflow somebody's footer at idle. */
+    const yard = /\.sk-credit-yard\s*\{([^}]*)\}/.exec(credit)?.[1] ?? "";
+    expect(yard).toMatch(/position:\s*relative/);
+    expect(yard).toMatch(/block-size:\s*0/);
+    expect(yard).toMatch(/inline-size:\s*calc\(/);
+  });
+
+  it("the walk band keeps his box inside that yard", () => {
+    /* **The assertion the two comments promise.** He is placed by his centre
+       and drawn either side of it, so his box stays inside a yard of `k` of his
+       own widths only while the band starts no earlier than `1 / 2k`. The two
+       numbers live in two different files — the multiplier in a stylesheet in
+       `Credit.astro`, the band in `ANCHOR_PACE` — and either one moved alone
+       walks him back over the credit at one end of every pace, which is the
+       exact defect this release is fixing and which nothing else here would
+       catch.
+
+       The multiplier is read out of the stylesheet rather than written down
+       again, because a third copy of it would be a third thing to keep in
+       step. */
+    const size = /\.sk-credit-yard\s*\{[^}]*inline-size:\s*calc\(([^;]*)\)\s*;/.exec(credit)?.[1];
+    expect(size).toBeTruthy();
+    const k = parseFloat(/\*\s*([\d.]+)\s*$/.exec(size!.trim())?.[1] ?? "");
+    expect(k).toBeGreaterThan(0);
+
+    const floor = 1 / (2 * k);
+    expect(ANCHOR_PACE.walkMin!).toBeGreaterThanOrEqual(floor);
+    expect(ANCHOR_PACE.walkMax!).toBeLessThanOrEqual(1 - floor);
+  });
+
+  it("and the roaming band would not have", () => {
+    /* Stated so the bound above cannot be read as a formality: the default band
+       is what an anchored companion inherited before this release, and it puts
+       a third of him back on the words. */
+    expect(PACE.walkMin).toBeLessThan(1 / (2 * 1.5));
   });
 });
 
