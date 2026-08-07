@@ -655,6 +655,32 @@ describe("the yard, and two numbers that are only correct together", () => {
     expect(ANCHOR_PACE.walkMax!).toBeLessThanOrEqual(1 - floor);
   });
 
+  it("centres him with one property, so both halves mirror together", async () => {
+    /* **The bug this catches was invisible to every other assertion here and
+       was found by measuring a right-to-left page.** His centring was two
+       declarations — `inset-inline-start` placing his inline-start edge at the
+       fraction, and a negative `margin-inline-start` pulling back half his
+       width. On an English page they agree. On `mosleh-clinic` they did not:
+       the inset mirrored and the margin did not mirror with it, so he sat half
+       his own width further toward the inline-end and, at the far end of his
+       walk band, stood 20px outside the yard reserved for him — measured at
+       [795,836] against a yard of [815,876].
+
+       The correction lives in the inset now and the margin is gone. Asserted as
+       *both* facts, because either alone reads as a refactor: the half-width
+       has to be in the inset, and there must be no margin left behind to apply
+       it a second time. */
+    const { host } = page();
+    mountCompanion(host, { placement: { mode: "anchor" } });
+    await flush();
+    const css = [...host.shadowRoot!.adoptedStyleSheets[0]!.cssRules]
+      .map((r) => r.cssText)
+      .join("\n");
+    const hostRule = /:host\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(hostRule).toMatch(/inset-inline-start:\s*calc\([^;]*--sk-mate-x[^;]*\/\s*2\s*\)/);
+    expect(hostRule).not.toMatch(/margin-inline-start/);
+  });
+
   it("and the roaming band would not have", () => {
     /* Stated so the bound above cannot be read as a formality: the default band
        is what an anchored companion inherited before this release, and it puts
