@@ -490,10 +490,24 @@ const SHEET = (mode: "roam" | "anchor"): string => `
           "inset-block-end: calc(100% - var(--sk-mate-top, 0px));"
         : "inset-block-start: var(--sk-mate-top, 0px);"
     }
-    inset-inline-start: calc(var(--sk-mate-x, 0.3) * 100%);
     /* The fraction places his *centre*, which is the number the loop reasons
-       about; the box is drawn either side of it. */
-    margin-inline-start: calc(var(--sk-mate-h) * var(--sk-mate-aspect) / -2);
+       about; the box is drawn either side of it, so half his width comes back
+       off the inset.
+
+       **The half-width is subtracted here rather than spent as a negative
+       margin-inline-start, and that is an RTL fix rather than a tidy-up.**
+       (No backticks anywhere in this block: the sheet is a template literal and
+       one of them ends it, which cost a red suite to find out.)
+       Measured on mosleh-clinic, which is the fleet's right-to-left site: with
+       the correction in the margin he sat half his own width further toward the
+       inline-end than the same code put him on an English page, and at the far
+       end of his walk band he stood 20px outside the yard reserved for him. The
+       inset mirrors; the negative margin did not mirror with it, so the two
+       halves of one centring disagreed about which way forward was. One
+       property cannot contradict itself. */
+    inset-inline-start: calc(
+      var(--sk-mate-x, 0.3) * 100% - var(--sk-mate-h) * var(--sk-mate-aspect) / 2
+    );
     opacity: var(--sk-mate-on, 0);
     /* **Not a detail.** He stands on the top edge of sections that contain
        links, and a decorative figure that can eat a click is the difference
